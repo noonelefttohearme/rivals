@@ -8,7 +8,17 @@ const commands = [
     .setName('panel')
     .setDescription('Post the kamidere whitelist panel')
     .setDefaultMemberPermissions('32')
-    .toJSON()
+    .toJSON(),
+  new SlashCommandBuilder()
+    .setName('generate')
+    .setDescription('Generate a new key')
+    .addStringOption(opt =>
+      opt.setName('script_type')
+        .setDescription('Script type (default: rivals)')
+        .setRequired(false)
+        .addChoices({ name: 'rivals', value: 'rivals' })
+    )
+    .toJSON(),
 ];
 
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);

@@ -14,6 +14,8 @@ const SCRIPT_ROLES = {
   rivals: '1562921775992541284',
 };
 
+const GENERATE_ROLE = '1565484945034576013';
+
 const COLORS = { gold: 0xd2aa37, dark: 0x121110, err: 0xb85040 };
 
 function kamiEmoji() {
@@ -63,6 +65,34 @@ client.on('interactionCreate', async interaction => {
     } catch (e) {
       return interaction.reply({ content: `Failed to post panel: ${e.message}`, ephemeral: true });
     }
+  }
+
+  // ── GENERATE KEY ─────────────────────────────────────────────────────────────
+  if (interaction.isChatInputCommand() && interaction.commandName === 'generate') {
+    if (!interaction.member.roles.cache.has(GENERATE_ROLE))
+      return interaction.reply({ content: 'You do not have permission to generate keys.', ephemeral: true });
+
+    await interaction.deferReply({ ephemeral: true });
+    const script_type = interaction.options.getString('script_type') || 'rivals';
+    const data = await apiCall('POST', '/generate', { script_type });
+
+    if (!data.ok) {
+      return interaction.editReply({
+        embeds: [new EmbedBuilder().setColor(COLORS.err).setDescription(data.message)],
+      });
+    }
+
+    return interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(COLORS.gold)
+          .setTitle('Key Generated')
+          .addFields(
+            { name: 'Key', value: `\`${data.key}\`` },
+            { name: 'Type', value: data.script_type, inline: true },
+          )
+      ],
+    });
   }
 
   if (!interaction.isButton() && !interaction.isModalSubmit()) return;

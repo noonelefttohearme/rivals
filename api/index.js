@@ -118,6 +118,22 @@ app.get('/stats', async (req, res) => {
   res.json({ total, active, bound });
 });
 
+// POST /generate  { script_type }
+app.post('/generate', async (req, res) => {
+  if (req.headers['x-bot-secret'] !== BOT_SECRET)
+    return res.status(401).json({ ok: false, message: 'Unauthorized.' });
+
+  const { script_type = 'rivals' } = req.body;
+
+  const seg = () => Math.random().toString(36).toUpperCase().slice(2, 6).padEnd(4, '0');
+  const key = `KAMI-${seg()}-${seg()}-${seg()}`;
+
+  const { error } = await supabase.from('keys').insert({ key, script_type });
+  if (error) return res.json({ ok: false, message: 'Failed to generate key.' });
+
+  return res.json({ ok: true, key, script_type });
+});
+
 // GET /key/:discord_id
 app.get('/key/:discord_id', async (req, res) => {
   if (req.headers['x-bot-secret'] !== BOT_SECRET)
