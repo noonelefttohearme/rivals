@@ -45,7 +45,10 @@ function buildPanel() {
     .setColor(COLORS.gold)
     .setTitle(`${HUB_NAME} Panel`)
     .setDescription('Use the buttons below to manage your access for this hub.')
-    .setFooter({ text: `${HUB_NAME} — #1 Whitelist Service` })
+    .setFooter({
+      text: `${HUB_NAME} — #1 Whitelist Service`,
+      iconURL: EMOJI_ID ? `https://cdn.discordapp.com/emojis/${EMOJI_ID}.png` : undefined,
+    })
     .setTimestamp();
 
   const row1 = new ActionRowBuilder().addComponents(
@@ -59,7 +62,7 @@ function buildPanel() {
     new ButtonBuilder().setCustomId('reset_hwid').setLabel('Reset HWID').setStyle(ButtonStyle.Danger).setEmoji('🔄'),
   );
 
-  return { content: kamiEmoji(), embeds: [embed], components: [row1, row2] };
+  return { embeds: [embed], components: [row1, row2] };
 }
 
 client.on('ready', () => console.log(`Logged in as ${client.user.tag}`));
