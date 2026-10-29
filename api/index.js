@@ -10,10 +10,7 @@ const supabase = createClient(
 );
 
 const BOT_SECRET = process.env.BOT_SECRET;
-
-function getHWID(req) {
-  return req.headers['x-hwid'] || req.body.hwid || null;
-}
+const HWID_RESET_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // POST /verify  { key, hwid }
 app.post('/verify', async (req, res) => {
@@ -33,20 +30,19 @@ app.post('/verify', async (req, res) => {
   }
 
   if (!data.hwid) {
-    // first use — bind HWID
     await supabase.from('keys').update({ hwid, last_used: new Date().toISOString() }).eq('key', key);
     return res.json({ valid: true, message: 'Key bound.' });
   }
 
   if (data.hwid !== hwid) {
-    return res.json({ valid: false, message: 'HWID mismatch. Use a different key or reset your HWID.' });
+    return res.json({ valid: false, message: 'HWID mismatch. Reset your HWID via the Discord panel.' });
   }
 
   await supabase.from('keys').update({ last_used: new Date().toISOString() }).eq('key', key);
   return res.json({ valid: true, message: 'OK' });
 });
 
-// POST /reset-hwid  { key }  — called by Discord bot
+// POST /reset-hwid  { key }  — called by Discord bot, enforces 24h cooldown
 app.post('/reset-hwid', async (req, res) => {
   if (req.headers['x-bot-secret'] !== BOT_SECRET)
     return res.status(401).json({ ok: false, message: 'Unauthorized.' });
@@ -56,16 +52,33 @@ app.post('/reset-hwid', async (req, res) => {
 
   const { data, error } = await supabase
     .from('keys')
-    .update({ hwid: null })
+    .select('reset_hwid_at')
     .eq('key', key)
-    .select()
     .single();
 
   if (error || !data) return res.json({ ok: false, message: 'Key not found.' });
-  return res.json({ ok: true, message: 'HWID reset.' });
+
+  if (data.reset_hwid_at) {
+    const elapsed = Date.now() - new Date(data.reset_hwid_at).getTime();
+    if (elapsed < HWID_RESET_COOLDOWN_MS) {
+      const remaining = HWID_RESET_COOLDOWN_MS - elapsed;
+      const hrs  = Math.floor(remaining / 3600000);
+      const mins = Math.floor((remaining % 3600000) / 60000);
+      return res.json({
+        ok: false,
+        message: `HWID reset is on cooldown. Try again in **${hrs}h ${mins}m**.`,
+      });
+    }
+  }
+
+  await supabase.from('keys')
+    .update({ hwid: null, reset_hwid_at: new Date().toISOString() })
+    .eq('key', key);
+
+  return res.json({ ok: true, message: 'HWID reset. Binds to your next device on execute.' });
 });
 
-// POST /redeem  { key, discord_id }  — called by Discord bot
+// POST /redeem  { key, discord_id }
 app.post('/redeem', async (req, res) => {
   if (req.headers['x-bot-secret'] !== BOT_SECRET)
     return res.status(401).json({ ok: false, message: 'Unauthorized.' });
@@ -90,29 +103,29 @@ app.post('/redeem', async (req, res) => {
     .single();
 
   if (error || !data) return res.json({ ok: false, message: 'Invalid or already redeemed key.' });
-  return res.json({ ok: true, key: data.key });
+  return res.json({ ok: true, key: data.key, script_type: data.script_type });
 });
 
-// GET /stats  — called by Discord bot
+// GET /stats
 app.get('/stats', async (req, res) => {
   if (req.headers['x-bot-secret'] !== BOT_SECRET)
     return res.status(401).json({ ok: false });
 
-  const { count: total } = await supabase.from('keys').select('*', { count: 'exact', head: true });
+  const { count: total }  = await supabase.from('keys').select('*', { count: 'exact', head: true });
   const { count: active } = await supabase.from('keys').select('*', { count: 'exact', head: true }).not('discord_id', 'is', null);
-  const { count: bound } = await supabase.from('keys').select('*', { count: 'exact', head: true }).not('hwid', 'is', null);
+  const { count: bound }  = await supabase.from('keys').select('*', { count: 'exact', head: true }).not('hwid', 'is', null);
 
   res.json({ total, active, bound });
 });
 
-// GET /key/:discord_id  — called by Discord bot to look up a user's key
+// GET /key/:discord_id
 app.get('/key/:discord_id', async (req, res) => {
   if (req.headers['x-bot-secret'] !== BOT_SECRET)
     return res.status(401).json({ ok: false });
 
   const { data, error } = await supabase
     .from('keys')
-    .select('key, hwid, redeemed_at, expires_at, last_used')
+    .select('key, hwid, redeemed_at, expires_at, last_used, script_type, reset_hwid_at')
     .eq('discord_id', req.params.discord_id)
     .single();
 
