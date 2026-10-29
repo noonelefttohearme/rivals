@@ -129,7 +129,7 @@ app.post('/generate', async (req, res) => {
   const key = `KAMI-${seg()}-${seg()}-${seg()}`;
 
   const { error } = await supabase.from('keys').insert({ key, script_type });
-  if (error) return res.json({ ok: false, message: 'Failed to generate key.' });
+  if (error) return res.json({ ok: false, message: `Failed to generate key: ${error.message}` });
 
   return res.json({ ok: true, key, script_type });
 });

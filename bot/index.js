@@ -46,7 +46,7 @@ function buildPanel() {
     .setTitle(`${HUB_NAME} Panel`)
     .setDescription('Use the buttons below to manage your access for this hub.')
     .setFooter({
-      text: `${HUB_NAME} — #1 Whitelist Service`,
+      text: HUB_NAME,
       iconURL: EMOJI_ID ? `https://cdn.discordapp.com/emojis/${EMOJI_ID}.png` : undefined,
     })
     .setTimestamp();
