@@ -1,5 +1,6 @@
 // Run once: node register.js
 // Registers the /panel slash command to your guild.
+require('dotenv').config();
 const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 
 const commands = [
