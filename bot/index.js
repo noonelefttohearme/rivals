@@ -23,12 +23,21 @@ function kamiEmoji() {
 }
 
 async function apiCall(method, path, body) {
-  const res = await fetch(`${API_URL}${path}`, {
-    method,
-    headers: { 'Content-Type': 'application/json', 'x-bot-secret': BOT_SECRET },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  return res.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'x-bot-secret': BOT_SECRET },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+    return res.json();
+  } catch {
+    return { ok: false, message: 'API timed out. Try again in a few seconds.' };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function buildPanel() {
@@ -50,7 +59,7 @@ function buildPanel() {
     new ButtonBuilder().setCustomId('reset_hwid').setLabel('Reset HWID').setStyle(ButtonStyle.Danger).setEmoji('🔄'),
   );
 
-  return { embeds: [embed], components: [row1, row2] };
+  return { content: kamiEmoji(), embeds: [embed], components: [row1, row2] };
 }
 
 client.on('ready', () => console.log(`Logged in as ${client.user.tag}`));
