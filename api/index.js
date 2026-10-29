@@ -4,6 +4,8 @@ const { createClient } = require('@supabase/supabase-js');
 const app = express();
 app.use(express.json());
 
+app.get('/ping', (req, res) => res.json({ ok: true, version: 2 }));
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
