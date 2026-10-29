@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kamidere — setup</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg:     #0d0c0b;
+    --panel:  #121110;
+    --border: rgba(160,120,35,0.3);
+    --gold:   #d2aa37;
+    --glow:   #ffd75a;
+    --muted:  #6a6860;
+    --fg:     #e1e1e6;
+    --dim:    #a09a90;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.65;
+    padding: 48px max(16px, 5vw);
+  }
+
+  .page {
+    max-width: 680px;
+    margin: 0 auto;
+  }
+
+  /* header */
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 40px;
+  }
+
+  .logo-text {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--gold);
+    letter-spacing: 1.5px;
+    text-shadow: 0 0 20px rgba(210,170,55,0.25);
+  }
+
+  header span.sep {
+    color: var(--border);
+    font-size: 20px;
+    margin: 0 2px;
+  }
+
+  header span.sub {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  /* sections */
+  .section {
+    border-left: 2px solid var(--border);
+    padding-left: 20px;
+    margin-bottom: 36px;
+  }
+
+  .section-num {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 4px;
+  }
+
+  h2 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--fg);
+    margin-bottom: 14px;
+  }
+
+  h3 {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 18px 0 8px;
+  }
+
+  p { color: var(--dim); margin-bottom: 10px; }
+
+  ol, ul {
+    padding-left: 18px;
+    color: var(--dim);
+  }
+
+  li { margin-bottom: 5px; }
+
+  strong { color: var(--fg); font-weight: 500; }
+
+  a { color: var(--gold); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* code blocks */
+  pre {
+    background: #0a0908;
+    border: 1px solid var(--border);
+    border-left: 2px solid rgba(210,170,55,0.5);
+    padding: 12px 14px;
+    margin: 10px 0;
+    overflow-x: auto;
+    position: relative;
+  }
+
+  pre code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--fg);
+    line-height: 1.6;
+  }
+
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    background: rgba(210,170,55,0.08);
+    color: var(--glow);
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+
+  pre code {
+    background: none;
+    padding: 0;
+    color: var(--fg);
+  }
+
+  /* copy button */
+  .copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: #1a1810;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    cursor: pointer;
+    transition: color 0.12s, border-color 0.12s;
+  }
+
+  .copy-btn:hover { color: var(--gold); border-color: rgba(210,170,55,0.5); }
+  .copy-btn.copied { color: var(--gold); }
+
+  /* note */
+  .note {
+    background: rgba(210,170,55,0.06);
+    border: 1px solid rgba(210,170,55,0.2);
+    padding: 10px 14px;
+    color: var(--dim);
+    margin: 10px 0;
+    font-size: 13px;
+  }
+
+  .note strong { color: var(--gold); }
+
+  /* done footer */
+  .done {
+    margin-top: 48px;
+    border-top: 1px solid var(--border);
+    padding-top: 24px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .done .tag {
+    display: inline-block;
+    color: var(--gold);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: 1px solid rgba(210,170,55,0.4);
+    padding: 2px 8px;
+    margin-bottom: 10px;
+  }
+
+  .done p { margin-bottom: 5px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <span class="logo-text">kamidere</span>
+    <span class="sep">—</span>
+    <span class="sub">Windows 10 Setup</span>
+  </header>
+
+  <!-- 1. Supabase -->
+  <div class="section">
+    <span class="section-num">01</span>
+    <h2>Supabase (database)</h2>
+    <ol>
+      <li>Go to <a href="https://supabase.com" target="_blank">supabase.com</a> → Sign up → <strong>New Project</strong></li>
+      <li>Pick a name and password, hit Create</li>
+      <li>Once it loads, click <strong>SQL Editor</strong> in the left sidebar</li>
+      <li>Paste everything from <code>api/schema.sql</code> into the editor and click <strong>Run</strong></li>
+      <li>Go to <strong>Settings → API</strong> and copy:
+        <ul style="margin-top:6px">
+          <li><strong>Project URL</strong> → save as <code>SUPABASE_URL</code></li>
+          <li><strong>service_role</strong> key (under "Project API Keys") → save as <code>SUPABASE_SERVICE_KEY</code></li>
+        </ul>
+      </li>
+    </ol>
+  </div>
+
+  <!-- 2. API -->
+  <div class="section">
+    <span class="section-num">02</span>
+    <h2>API on Fly.io</h2>
+
+    <h3>Step 1 — Install Fly CLI</h3>
+    <p>Open PowerShell as Administrator and paste this:</p>
+    <pre><button class="copy-btn" onclick="copy(this)">copy</button><code>powershell -Command "iwr https://fly.io/install.ps1 -useb | iex"</code></pre>
+    <p>Close and reopen PowerShell after it finishes.</p>
+
+    <h3>Step 2 — Sign up</h3>
+    <pre><button class="copy-btn" onclick="copy(this)">copy</button><code>flyctl auth signup</code></pre>
+    <p>It will open a browser. Create a free account (no card needed for free tier).</p>
+
+    <h3>Step 3 — Clone &amp; navigate</h3>
+    <pre><button class="copy-btn" onclick="copy(this)">copy</button><code>git clone https://github.com/iwishpeoplelovedmeforme/kami.git
+cd kami\api</code></pre>
+    <pre><button class="copy-btn" onclick="copy(this)">copy</button><code>flyctl launch --name kamidere-api --region lax --no-deploy</code></pre>
+    <p>When it asks questions just press Enter to accept defaults.</p>
+
+    <h3>Step 4 — Add secrets</h3>
+    <p>Run these one by one, replacing the values:</p>
+    <pre><button class="copy-btn" onclick="copy(this)">copy</button><code>flyctl secrets set SUPABASE_URL=https://xxxx.supabase.co
+flyctl secrets set SUPABASE_SERVICE_KEY=your_service_role_key_here
+flyctl secrets set BOT_SECRET=makeuparandomlongstring123</code></pre>
+
+    <h3>Step 5 — Deploy</h3>
+    <pre><button class="copy-btn" onclick="copy(this)">copy</button><code>flyctl deploy</code></pre>
+    <p>When it finishes it prints a URL like <code>https://kamidere-api.fly.dev</code> — <strong>save this</strong>, it is your <code>API_URL</code>.</p>
+  </div>
+
+  <!-- 3. Discord Bot -->
+  <div class="section">
+    <span class="section-num">03</span>
+    <h2>Discord Bot</h2>
+
+    <h3>Step 1 — Create the bot</h3>
+    <ol>
+      <li>Go to <a href="https://discord.com/developers/applications" target="_blank">discord.com/developers/applications</a> → <strong>New Application</strong> → name it <code>kamidere</code></li>
+      <li>Click <strong>Bot</strong> on the left → <strong>Reset Token</strong> → copy the token → save as <code>BOT_TOKEN</code></li>
+      <li>Scroll down, turn on <strong>Server Members Intent</strong></li>
+      <li>Click <strong>OAuth2 → URL Generator</strong> → tick <code>bot</code> + <code>applications.commands</code></li>
+      <li>Under Bot Permissions tick: <strong>Manage Roles</strong>, <strong>Send Messages</strong>, <strong>Use Slash Commands</strong></li>
+      <li>Copy the URL at the bottom and open it to invite the bot to your server</li>
+    </ol>
+
+    <h3>Step 2 — Install Node.js</h3>
+    <p>Download and install from <a href="https://nodejs.org" target="_blank">nodejs.org</a> (LTS version). Just click Next through the installer.</p>
+
+    <h3>Step 3 — Set up the bot</h3>
+    <pre><button class="copy-btn" onclick="copy(this)">copy</button><code>cd kami\bot
+npm install</code></pre>
+
+    <p>Create a file called <code>.env</code> in the <code>bot/</code> folder with Notepad and paste this (fill in your values):</p>
+    <pre><button class="copy-btn" onclick="copy(this)">copy</button><code>BOT_TOKEN=your_bot_token
+CLIENT_ID=your_application_id
+GUILD_ID=your_discord_server_id
+API_URL=https://kamidere-api.fly.dev
+BOT_SECRET=makeuparandomlongstring123
+SCRIPT_URL=https://raw.githubusercontent.com/iwishpeoplelovedmeforme/kami/main/loader.lua
+HUB_NAME=kamidere
+KAMIDERE_EMOJI_ID=your_kamidere_emoji_id</code></pre>
+
+    <div class="note">
+      <strong>CLIENT_ID:</strong> discord.com/developers → your app → General Information → Application ID<br>
+      <strong>GUILD_ID:</strong> Right-click your server icon → Copy Server ID (enable Developer Mode in Discord settings first)<br>
+      <strong>KAMIDERE_EMOJI_ID:</strong> Type <code>\:kamidere:</code> in any channel, it shows the full ID
+    </div>
+
+    <h3>Step 4 — Register slash command (once)</h3>
+    <pre><button class="copy-btn" onclick="copy(this)">copy</button><code>node register.js</code></pre>
+
+    <h3>Step 5 — Run the bot</h3>
+    <pre><button class="copy-btn" onclick="copy(this)">copy</button><code>node index.js</code></pre>
+    <p>Go to your Discord server and type <code>/panel</code> — the panel will appear.</p>
+  </div>
+
+  <!-- 4. Add Keys -->
+  <div class="section">
+    <span class="section-num">04</span>
+    <h2>Add keys</h2>
+    <p>In Supabase → SQL Editor, run:</p>
+    <pre><button class="copy-btn" onclick="copy(this)">copy</button><code>insert into keys (key, script_type) values
+  ('KAMI-ABCD-EFGH-IJKL', 'rivals'),
+  ('KAMI-WXYZ-1234-5678', 'rivals');</code></pre>
+    <p>Make up any key format you want. Give these keys to your users.</p>
+  </div>
+
+  <!-- 5. Update loader -->
+  <div class="section">
+    <span class="section-num">05</span>
+    <h2>Update loader.lua</h2>
+    <p>Open <code>loader.lua</code> and replace <code>https://YOUR_API_URL/verify</code> with your Fly.io URL:</p>
+    <pre><button class="copy-btn" onclick="copy(this)">copy</button><code>https://kamidere-api.fly.dev/verify</code></pre>
+    <p>Then commit and push:</p>
+    <pre><button class="copy-btn" onclick="copy(this)">copy</button><code>git add loader.lua
+git commit -m "update api url"
+git push</code></pre>
+  </div>
+
+  <div class="done">
+    <span class="tag">done</span>
+    <p>Users execute <code>loader.lua</code> and put their key at the top.</p>
+    <p>First run binds their HWID. Wrong HWID = blocked.</p>
+    <p>They reset HWID via the Discord panel (once per 24 hours).</p>
+  </div>
+
+</div>
+
+<script>
+  function copy(btn) {
+    const code = btn.nextElementSibling.textContent;
+    navigator.clipboard.writeText(code).then(() => {
+      btn.textContent = 'copied';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1500);
+    }).catch(() => {
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(btn.nextElementSibling);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    });
+  }
+</script>
+</body>
+</html>
