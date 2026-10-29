@@ -33,9 +33,10 @@ It will open a browser. Create a free account (no card needed for free tier).
 
 **Step 3 — Deploy**
 
-Navigate into the api folder:
+First, download the repo if you haven't:
 ```
-cd path\to\kami\api
+git clone https://github.com/iwishpeoplelovedmeforme/kami.git
+cd kami\api
 ```
 Then run:
 ```
@@ -78,9 +79,9 @@ Download and install from **nodejs.org** (LTS version). Just click Next through 
 
 **Step 3 — Set up the bot**
 
-Open PowerShell, go into the bot folder:
+Open PowerShell, go into the bot folder (from wherever you cloned the repo):
 ```
-cd path\to\kami\bot
+cd kami\bot
 ```
 Install dependencies:
 ```
