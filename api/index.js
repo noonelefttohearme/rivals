@@ -18,7 +18,7 @@ app.post('/verify', async (req, res) => {
   if (!key || !hwid) return res.json({ valid: false, message: 'Missing key or hwid.' });
 
   const { data, error } = await supabase
-    .from('keys')
+    .from('licenses')
     .select('*')
     .eq('key', key)
     .single();
@@ -30,7 +30,7 @@ app.post('/verify', async (req, res) => {
   }
 
   if (!data.hwid) {
-    await supabase.from('keys').update({ hwid, last_used: new Date().toISOString() }).eq('key', key);
+    await supabase.from('licenses').update({ hwid, last_used: new Date().toISOString() }).eq('key', key);
     return res.json({ valid: true, message: 'Key bound.' });
   }
 
@@ -38,7 +38,7 @@ app.post('/verify', async (req, res) => {
     return res.json({ valid: false, message: 'HWID mismatch. Reset your HWID via the Discord panel.' });
   }
 
-  await supabase.from('keys').update({ last_used: new Date().toISOString() }).eq('key', key);
+  await supabase.from('licenses').update({ last_used: new Date().toISOString() }).eq('key', key);
   return res.json({ valid: true, message: 'OK' });
 });
 
@@ -51,7 +51,7 @@ app.post('/reset-hwid', async (req, res) => {
   if (!key) return res.json({ ok: false, message: 'No key provided.' });
 
   const { data, error } = await supabase
-    .from('keys')
+    .from('licenses')
     .select('reset_hwid_at')
     .eq('key', key)
     .single();
@@ -71,7 +71,7 @@ app.post('/reset-hwid', async (req, res) => {
     }
   }
 
-  await supabase.from('keys')
+  await supabase.from('licenses')
     .update({ hwid: null, reset_hwid_at: new Date().toISOString() })
     .eq('key', key);
 
@@ -87,7 +87,7 @@ app.post('/redeem', async (req, res) => {
   if (!key || !discord_id) return res.json({ ok: false, message: 'Missing key or discord_id.' });
 
   const { data: existing } = await supabase
-    .from('keys')
+    .from('licenses')
     .select('*')
     .eq('discord_id', discord_id)
     .single();
@@ -95,7 +95,7 @@ app.post('/redeem', async (req, res) => {
   if (existing) return res.json({ ok: false, message: 'You already have a key.' });
 
   const { data, error } = await supabase
-    .from('keys')
+    .from('licenses')
     .update({ discord_id, redeemed_at: new Date().toISOString() })
     .eq('key', key)
     .is('discord_id', null)
@@ -111,9 +111,9 @@ app.get('/stats', async (req, res) => {
   if (req.headers['x-bot-secret'] !== BOT_SECRET)
     return res.status(401).json({ ok: false });
 
-  const { count: total }  = await supabase.from('keys').select('*', { count: 'exact', head: true });
-  const { count: active } = await supabase.from('keys').select('*', { count: 'exact', head: true }).not('discord_id', 'is', null);
-  const { count: bound }  = await supabase.from('keys').select('*', { count: 'exact', head: true }).not('hwid', 'is', null);
+  const { count: total }  = await supabase.from('licenses').select('*', { count: 'exact', head: true });
+  const { count: active } = await supabase.from('licenses').select('*', { count: 'exact', head: true }).not('discord_id', 'is', null);
+  const { count: bound }  = await supabase.from('licenses').select('*', { count: 'exact', head: true }).not('hwid', 'is', null);
 
   res.json({ total, active, bound });
 });
@@ -128,7 +128,7 @@ app.post('/generate', async (req, res) => {
   const seg = () => Math.random().toString(36).toUpperCase().slice(2, 6).padEnd(4, '0');
   const key = `KAMI-${seg()}-${seg()}-${seg()}`;
 
-  const { error } = await supabase.from('keys').insert({ key, script_type });
+  const { error } = await supabase.from('licenses').insert({ key, script_type });
   if (error) return res.json({ ok: false, message: `Failed to generate key: ${error.message}` });
 
   return res.json({ ok: true, key, script_type });
@@ -140,7 +140,7 @@ app.get('/key/:discord_id', async (req, res) => {
     return res.status(401).json({ ok: false });
 
   const { data, error } = await supabase
-    .from('keys')
+    .from('licenses')
     .select('key, hwid, redeemed_at, expires_at, last_used, script_type, reset_hwid_at')
     .eq('discord_id', req.params.discord_id)
     .single();
