@@ -30,7 +30,7 @@ end
 local body = game:GetService("HttpService"):JSONDecode(response.Body)
 
 if not body.valid then
-    error("[kamidere] " .. (body.message or "invalid key."), 0)
+    error("Invalid key\nMake a support ticket", 0)
 end
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/iwishpeoplelovedmeforme/kami/main/kami.lua"))()
