@@ -14,8 +14,13 @@ end
 
 local hwid = getHWID()
 
+local httpFn = rawget(_G,"syn") and rawget(_G,"syn").request
+    or rawget(_G,"request")
+    or rawget(_G,"http_request")
+    or rawget(_G,"fluxus_request")
+
 local ok, response = pcall(function()
-    return (syn and syn.request or request or http_request)({
+    return httpFn({
         Url    = API,
         Method = "POST",
         Headers = { ["Content-Type"] = "application/json" },
