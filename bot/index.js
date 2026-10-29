@@ -113,22 +113,21 @@ client.on('interactionCreate', async interaction => {
 
   // ── GET SCRIPT ──────────────────────────────────────────────────────────────
   if (interaction.customId === 'get_script') {
+    await interaction.deferReply({ ephemeral: true });
     const data = await apiCall('GET', `/key/${userId}`);
     if (!data.ok) {
-      return interaction.reply({
+      return interaction.editReply({
         embeds: [new EmbedBuilder().setColor(COLORS.err).setDescription('No key found. Redeem one first.')],
-        ephemeral: true,
       });
     }
     const snippet = `_G.KAMI_KEY = "${data.key}"\nloadstring(game:HttpGet("${SCRIPT_URL}"))()`;
-    return interaction.reply({
+    return interaction.editReply({
       embeds: [
         new EmbedBuilder()
           .setColor(COLORS.gold)
           .setTitle('Your Script')
           .setDescription(`Copy and execute this in your executor:\n\`\`\`lua\n${snippet}\n\`\`\``)
       ],
-      ephemeral: true,
     });
   }
 
