@@ -120,7 +120,21 @@ client.on('interactionCreate', async interaction => {
         embeds: [new EmbedBuilder().setColor(COLORS.err).setDescription('No key found. Redeem one first.')],
       });
     }
-    const snippet = `_G.KAMI_KEY = "${data.key}"\nloadstring(game:HttpGet("${SCRIPT_URL}"))()`;
+    const snippet = `local KEY="${data.key}"
+local API="https://kamidere-api.fly.dev/verify"
+local function getHWID()
+  if syn and syn.request then return tostring(game:GetService("RbxAnalyticsService"):GetClientId()) end
+  if rconsoleinfo then return rconsoleinfo() end
+  if identifyexecutor then return identifyexecutor() end
+  return tostring(game.PlaceId)..tostring(game:GetService("Players").LocalPlayer.UserId)
+end
+local ok,res=pcall(function()
+  return(syn and syn.request or request or http_request)({Url=API,Method="POST",Headers={["Content-Type"]="application/json"},Body=game:GetService("HttpService"):JSONEncode({key=KEY,hwid=getHWID()})})
+end)
+if not ok or not res then error("kamidere: could not reach server",0) end
+local b=game:GetService("HttpService"):JSONDecode(res.Body)
+if not b.valid then error("Invalid key\\nMake a support ticket",0) end
+loadstring(game:HttpGet("https://raw.githubusercontent.com/iwishpeoplelovedmeforme/kami/main/kami.lua"))()`;
     return interaction.editReply({
       embeds: [
         new EmbedBuilder()
