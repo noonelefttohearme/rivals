@@ -57,8 +57,12 @@ client.on('interactionCreate', async interaction => {
   if (interaction.isChatInputCommand() && interaction.commandName === 'panel') {
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild))
       return interaction.reply({ content: 'No permission.', ephemeral: true });
-    await interaction.channel.send(buildPanel());
-    return interaction.reply({ content: 'Panel posted.', ephemeral: true });
+    try {
+      await interaction.channel.send(buildPanel());
+      return interaction.reply({ content: 'Panel posted.', ephemeral: true });
+    } catch (e) {
+      return interaction.reply({ content: `Failed to post panel: ${e.message}`, ephemeral: true });
+    }
   }
 
   if (!interaction.isButton() && !interaction.isModalSubmit()) return;
