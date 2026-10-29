@@ -36,7 +36,7 @@ function buildPanel() {
     .setColor(COLORS.gold)
     .setTitle(`${HUB_NAME} Panel`)
     .setDescription('Use the buttons below to manage your access for this hub.')
-    .setFooter({ text: `${kamiEmoji()} ${HUB_NAME} — #1 Whitelist Service` })
+    .setFooter({ text: `${HUB_NAME} — #1 Whitelist Service` })
     .setTimestamp();
 
   const row1 = new ActionRowBuilder().addComponents(
