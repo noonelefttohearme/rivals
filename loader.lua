@@ -1,14 +1,9 @@
 -- kamidere loader
--- Put your key below and execute. Do not share this file.
 
-local KEY = "KAMI-XXXX-XXXX-XXXX"  -- replace with your key
-
--- ── key check ────────────────────────────────────────────────────────────────
-
-local API = "https://YOUR_API_URL/verify"  -- replace with your deployed API URL
+local KEY = _G.KAMI_KEY or "KAMI-XXXX-XXXX-XXXX"
+local API = "https://kamidere-api.fly.dev/verify"
 
 local function getHWID()
-    -- tries common executor HWID functions in order
     if syn and syn.request then
         return tostring(game:GetService("RbxAnalyticsService"):GetClientId())
     end
@@ -37,7 +32,5 @@ local body = game:GetService("HttpService"):JSONDecode(response.Body)
 if not body.valid then
     error("[kamidere] " .. (body.message or "invalid key."), 0)
 end
-
--- ── load main script ──────────────────────────────────────────────────────────
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/iwishpeoplelovedmeforme/kami/main/kami.lua"))()

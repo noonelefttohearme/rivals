@@ -120,14 +120,13 @@ client.on('interactionCreate', async interaction => {
         ephemeral: true,
       });
     }
-    const loader = `loadstring(game:HttpGet("${SCRIPT_URL}"))()`;
+    const snippet = `_G.KAMI_KEY = "${data.key}"\nloadstring(game:HttpGet("${SCRIPT_URL}"))()`;
     return interaction.reply({
       embeds: [
         new EmbedBuilder()
           .setColor(COLORS.gold)
           .setTitle('Your Script')
-          .setDescription(`Set your key at the top of the loader then execute.\n\`\`\`lua\n${loader}\n\`\`\``)
-          .addFields({ name: 'Your Key', value: `||${data.key}||` })
+          .setDescription(`Copy and execute this in your executor:\n\`\`\`lua\n${snippet}\n\`\`\``)
       ],
       ephemeral: true,
     });
