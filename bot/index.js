@@ -24,7 +24,7 @@ function kamiEmoji() {
 
 async function apiCall(method, path, body) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10000);
+  const timer = setTimeout(() => controller.abort(), 20000);
   try {
     const res = await fetch(`${API_URL}${path}`, {
       method,
