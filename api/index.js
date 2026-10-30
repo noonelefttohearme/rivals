@@ -25,10 +25,10 @@ app.post('/verify', async (req, res) => {
     .eq('key', key)
     .single();
 
-  if (error || !data) return res.json({ valid: false, message: 'Invalid key.' });
+  if (error || !data) return res.json({ valid: false, reason: 'invalid_key', message: 'Invalid key.' });
 
   if (data.expires_at && new Date(data.expires_at) < new Date()) {
-    return res.json({ valid: false, message: 'Key expired.' });
+    return res.json({ valid: false, reason: 'expired', message: 'Key expired.' });
   }
 
   if (!data.hwid) {
@@ -37,7 +37,7 @@ app.post('/verify', async (req, res) => {
   }
 
   if (data.hwid !== hwid) {
-    return res.json({ valid: false, message: 'HWID mismatch. Reset your HWID via the Discord panel.' });
+    return res.json({ valid: false, reason: 'hwid_mismatch', message: 'HWID mismatch.' });
   }
 
   await supabase.from('licenses').update({ last_used: new Date().toISOString() }).eq('key', key);
