@@ -22,6 +22,11 @@ const commands = [
         .addChoices({ name: 'rivals', value: 'rivals' })
     )
     .toJSON(),
+  new SlashCommandBuilder()
+    .setName('key')
+    .setDescription('Look up a user\'s key info')
+    .addUserOption(opt => opt.setName('user').setDescription('Discord user').setRequired(true))
+    .toJSON(),
   userOrKey(new SlashCommandBuilder().setName('blacklist').setDescription('Blacklist a user')).toJSON(),
   userOrKey(new SlashCommandBuilder().setName('whitelist').setDescription('Whitelist (unblacklist) a user')).toJSON(),
   userOrKey(new SlashCommandBuilder().setName('unblacklist').setDescription('Remove blacklist from a user')).toJSON(),

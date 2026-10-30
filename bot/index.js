@@ -117,6 +117,37 @@ client.on('interactionCreate', async interaction => {
     });
   }
 
+  // ── KEY LOOKUP ───────────────────────────────────────────────────────────────
+  if (interaction.isChatInputCommand() && interaction.commandName === 'key') {
+    if (!interaction.member.roles.cache.has(GENERATE_ROLE))
+      return interaction.reply({ content: 'No permission.', ephemeral: true });
+
+    await interaction.deferReply({ ephemeral: true });
+    const target = interaction.options.getUser('user');
+    const data = await apiCall('GET', `/key/${target.id}`);
+
+    if (!data.ok) {
+      return interaction.editReply({ embeds: [errEmbed(`No key found for ${target.tag}.`)] });
+    }
+
+    return interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(COLORS.gold)
+          .setTitle(`🔑  Key Info — ${target.username}`)
+          .addFields(
+            { name: '🔑  Key',        value: `\`${data.key}\``,                                         inline: false },
+            { name: '🎮  Type',       value: `\`${data.script_type ?? 'N/A'}\``,                        inline: true  },
+            { name: '🔒  HWID Bound', value: data.hwid ? '✅ Yes' : '❌ No',                            inline: true  },
+            { name: '📅  Redeemed',   value: data.redeemed_at ? `<t:${Math.floor(new Date(data.redeemed_at)/1000)}:R>` : 'N/A', inline: true },
+            { name: '🕐  Last Used',  value: data.last_used   ? `<t:${Math.floor(new Date(data.last_used)/1000)}:R>`   : 'Never',  inline: true },
+          )
+          .setFooter(footer())
+          .setTimestamp()
+      ],
+    });
+  }
+
   // ── FREEZE KEY ───────────────────────────────────────────────────────────────
   if (interaction.isChatInputCommand() && interaction.commandName === 'freezekey') {
     if (!interaction.member.roles.cache.has(GENERATE_ROLE))
