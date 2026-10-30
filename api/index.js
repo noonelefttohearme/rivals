@@ -1,10 +1,33 @@
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 app.use(express.json());
 
+const SCRIPT_SOURCE = fs.readFileSync(path.join(__dirname, 'kami.lua'), 'utf8');
+
 app.get('/ping', (req, res) => res.json({ ok: true, version: 2 }));
+
+// GET /script?key=KAMI-XXXX&hwid=XXXX
+app.get('/script', async (req, res) => {
+  const { key, hwid } = req.query;
+  if (!key || !hwid) return res.status(400).send('-- missing key or hwid');
+
+  const { data, error } = await supabase
+    .from('licenses')
+    .select('hwid, expires_at')
+    .eq('key', key)
+    .single();
+
+  if (error || !data) return res.status(403).send('-- invalid key');
+  if (data.expires_at && new Date(data.expires_at) < new Date()) return res.status(403).send('-- key expired');
+  if (data.hwid && data.hwid !== hwid) return res.status(403).send('-- hwid mismatch');
+
+  res.setHeader('Content-Type', 'text/plain');
+  res.send(SCRIPT_SOURCE);
+});
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
