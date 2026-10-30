@@ -7,19 +7,28 @@ const API_URL    = process.env.API_URL;
 const BOT_SECRET = process.env.BOT_SECRET;
 const SCRIPT_URL = process.env.SCRIPT_URL;
 const HUB_NAME   = process.env.HUB_NAME || 'kamidere';
-const EMOJI_ID   = process.env.KAMIDERE_EMOJI_ID; // numeric ID of the :kamidere: emoji
+const EMOJI_ID   = process.env.KAMIDERE_EMOJI_ID;
 
-// role IDs per script type — add more as needed
 const SCRIPT_ROLES = {
   rivals: '1562921775992541284',
 };
 
 const GENERATE_ROLE = '1565484945034576013';
 
-const COLORS = { gold: 0xd2aa37, dark: 0x121110, err: 0xb85040 };
+const COLORS = { gold: 0xd2aa37, dark: 0x121110, err: 0xb85040, green: 0x2ecc71 };
 
-function kamiEmoji() {
-  return EMOJI_ID ? `<:kamidere:${EMOJI_ID}>` : '⭐';
+function footer() {
+  return {
+    text: HUB_NAME,
+    iconURL: EMOJI_ID ? `https://cdn.discordapp.com/emojis/${EMOJI_ID}.png` : undefined,
+  };
+}
+
+function errEmbed(msg) {
+  return new EmbedBuilder()
+    .setColor(COLORS.err)
+    .setDescription(`> ❌  ${msg}`)
+    .setFooter(footer());
 }
 
 async function apiCall(method, path, body) {
@@ -43,12 +52,9 @@ async function apiCall(method, path, body) {
 function buildPanel() {
   const embed = new EmbedBuilder()
     .setColor(COLORS.gold)
-    .setTitle(`${HUB_NAME} Panel`)
-    .setDescription('Use the buttons below to manage your access for this hub.')
-    .setFooter({
-      text: HUB_NAME,
-      iconURL: EMOJI_ID ? `https://cdn.discordapp.com/emojis/${EMOJI_ID}.png` : undefined,
-    })
+    .setTitle(`${HUB_NAME}`)
+    .setDescription('> Manage your access using the buttons below.')
+    .setFooter(footer())
     .setTimestamp();
 
   const row1 = new ActionRowBuilder().addComponents(
@@ -67,7 +73,6 @@ function buildPanel() {
 
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
-  // keep API warm so Roblox requests don't time out on cold start
   setInterval(() => fetch(`${API_URL}/ping`).catch(() => {}), 4 * 60 * 1000);
 });
 
@@ -93,20 +98,21 @@ client.on('interactionCreate', async interaction => {
     const data = await apiCall('POST', '/generate', { script_type });
 
     if (!data.ok) {
-      return interaction.editReply({
-        embeds: [new EmbedBuilder().setColor(COLORS.err).setDescription(data.message)],
-      });
+      return interaction.editReply({ embeds: [errEmbed(data.message)] });
     }
 
     return interaction.editReply({
       embeds: [
         new EmbedBuilder()
           .setColor(COLORS.gold)
-          .setTitle('Key Generated')
+          .setTitle('🔐  Key Generated')
+          .setDescription(`> Your key has been created. Send it directly to the user — do not share publicly.`)
           .addFields(
-            { name: 'Key', value: `\`${data.key}\`` },
-            { name: 'Type', value: data.script_type, inline: true },
+            { name: '🔑  Key', value: `\`\`\`${data.key}\`\`\`` },
+            { name: '🎮  Script', value: `\`${data.script_type}\``, inline: true },
           )
+          .setFooter(footer())
+          .setTimestamp()
       ],
     });
   }
@@ -120,9 +126,7 @@ client.on('interactionCreate', async interaction => {
     await interaction.deferReply({ ephemeral: true });
     const data = await apiCall('GET', `/key/${userId}`);
     if (!data.ok) {
-      return interaction.editReply({
-        embeds: [new EmbedBuilder().setColor(COLORS.err).setDescription('No key found. Redeem one first.')],
-      });
+      return interaction.editReply({ embeds: [errEmbed('No key found. Redeem one first.')] });
     }
     const key = data.key;
     const snippet = `_G.KAMI_KEY = "${key}"\nloadstring(game:HttpGet("https://raw.githubusercontent.com/noonelefttohearme/rivals/main/loader.lua"))()`;
@@ -130,8 +134,9 @@ client.on('interactionCreate', async interaction => {
       embeds: [
         new EmbedBuilder()
           .setColor(COLORS.gold)
-          .setTitle('Your Script')
+          .setTitle('📄  Your Script')
           .setDescription(`\`\`\`lua\n${snippet}\n\`\`\``)
+          .setFooter({ ...footer(), text: `${HUB_NAME} · paste into your executor` })
       ],
     });
   }
@@ -160,12 +165,9 @@ client.on('interactionCreate', async interaction => {
     const data = await apiCall('POST', '/redeem', { key, discord_id: userId });
 
     if (!data.ok) {
-      return interaction.editReply({
-        embeds: [new EmbedBuilder().setColor(COLORS.err).setDescription(data.message)],
-      });
+      return interaction.editReply({ embeds: [errEmbed(data.message)] });
     }
 
-    // assign role based on script_type
     const roleId = SCRIPT_ROLES[data.script_type];
     if (roleId) {
       try { await interaction.member.roles.add(roleId); } catch {}
@@ -174,9 +176,11 @@ client.on('interactionCreate', async interaction => {
     return interaction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setColor(COLORS.gold)
-          .setTitle('Key Redeemed')
-          .setDescription('Your key has been activated. Use **Get Script** to get your loader.')
+          .setColor(COLORS.green)
+          .setTitle('✅  Key Redeemed')
+          .setDescription('> Your key is now active. Click **Get Script** to grab your loader.')
+          .setFooter(footer())
+          .setTimestamp()
       ],
     });
   }
@@ -189,12 +193,14 @@ client.on('interactionCreate', async interaction => {
       embeds: [
         new EmbedBuilder()
           .setColor(COLORS.gold)
-          .setTitle(`${HUB_NAME} Stats`)
+          .setTitle(`📊  ${HUB_NAME} Stats`)
           .addFields(
-            { name: 'Total Keys',   value: `${data.total}`,  inline: true },
-            { name: 'Active Users', value: `${data.active}`, inline: true },
-            { name: 'HWID Bound',   value: `${data.bound}`,  inline: true },
+            { name: '🗝️  Total Keys',   value: `\`${data.total}\``,  inline: true },
+            { name: '👥  Active Users', value: `\`${data.active}\``, inline: true },
+            { name: '🔒  HWID Bound',   value: `\`${data.bound}\``,  inline: true },
           )
+          .setFooter(footer())
+          .setTimestamp()
       ],
     });
   }
@@ -205,27 +211,27 @@ client.on('interactionCreate', async interaction => {
     const data = await apiCall('GET', `/key/${userId}`);
 
     if (!data.ok) {
-      return interaction.editReply({
-        embeds: [new EmbedBuilder().setColor(COLORS.err).setDescription('No key found. Redeem one first.')],
-      });
+      return interaction.editReply({ embeds: [errEmbed('No key found. Redeem one first.')] });
     }
 
     const roleId = SCRIPT_ROLES[data.script_type];
     if (!roleId) {
-      return interaction.editReply({
-        embeds: [new EmbedBuilder().setColor(COLORS.err).setDescription('No role configured for your key type.')],
-      });
+      return interaction.editReply({ embeds: [errEmbed('No role configured for your key type.')] });
     }
 
     try {
       await interaction.member.roles.add(roleId);
       return interaction.editReply({
-        embeds: [new EmbedBuilder().setColor(COLORS.gold).setDescription('Role assigned.')],
+        embeds: [
+          new EmbedBuilder()
+            .setColor(COLORS.green)
+            .setTitle('🪪  Role Assigned')
+            .setDescription(`> You've been given the **${data.script_type}** role.`)
+            .setFooter(footer())
+        ],
       });
     } catch {
-      return interaction.editReply({
-        embeds: [new EmbedBuilder().setColor(COLORS.err).setDescription('Could not assign role. Check bot permissions.')],
-      });
+      return interaction.editReply({ embeds: [errEmbed('Could not assign role. Check bot permissions.')] });
     }
   }
 
@@ -235,9 +241,7 @@ client.on('interactionCreate', async interaction => {
     const keyData = await apiCall('GET', `/key/${userId}`);
 
     if (!keyData.ok) {
-      return interaction.editReply({
-        embeds: [new EmbedBuilder().setColor(COLORS.err).setDescription('No key found.')],
-      });
+      return interaction.editReply({ embeds: [errEmbed('No key found.')] });
     }
 
     const data = await apiCall('POST', '/reset-hwid', { key: keyData.key });
@@ -245,8 +249,11 @@ client.on('interactionCreate', async interaction => {
     return interaction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setColor(data.ok ? COLORS.gold : COLORS.err)
-          .setDescription(data.message)
+          .setColor(data.ok ? COLORS.green : COLORS.err)
+          .setTitle(data.ok ? '🔄  HWID Reset' : '⏳  On Cooldown')
+          .setDescription(`> ${data.message}`)
+          .setFooter(footer())
+          .setTimestamp()
       ],
     });
   }
