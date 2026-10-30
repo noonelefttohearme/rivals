@@ -43,10 +43,8 @@ for _, name in ipairs(_candidates) do
     if ok and fn then httpFn = fn _foundName = name break end
 end
 
-print("[kami] httpFn=" .. tostring(_foundName))
-
 if not httpFn then
-    kickPlayer("Invalid key\nMake a ticket in the discord server! \ndiscord.gg/kamidere")
+    kickPlayer("[KAMI DBG] No HTTP function found. Executor: " .. tostring(identifyexecutor and identifyexecutor() or "unknown"))
 end
 
 local ok, response = pcall(function()
@@ -58,20 +56,16 @@ local ok, response = pcall(function()
     })
 end)
 
-print("[kami] verify ok=" .. tostring(ok) .. " body=" .. tostring(response and response.Body or "nil"))
-
 if not ok or not response then
-    kickPlayer("Invalid key\nMake a ticket in the discord server! \ndiscord.gg/kamidere")
+    kickPlayer("[KAMI DBG] HTTP request failed. err=" .. tostring(response))
 end
 
 local parseOk, body = pcall(function() return HttpService:JSONDecode(response.Body) end)
 if not parseOk or not body then
-    print("[kami] JSONDecode failed: " .. tostring(body))
-    kickPlayer("Invalid key\nMake a ticket in the discord server! \ndiscord.gg/kamidere")
+    kickPlayer("[KAMI DBG] Parse error. raw=" .. tostring(response.Body):sub(1, 80))
 end
 
 if not body.valid then
-    print("[kami] invalid reason=" .. tostring(body.reason))
     if body.reason == "blacklisted" then
         kickPlayer("YOU ARE BLACKLISTED!\n        KSY NIGGA")
     elseif body.reason == "frozen" then
@@ -79,14 +73,13 @@ if not body.valid then
     elseif body.reason == "hwid_mismatch" then
         kickPlayer("HWID Mismatch please reset your HWID!")
     else
-        kickPlayer("Invalid key\nMake a ticket in the discord server! \ndiscord.gg/kamidere")
+        kickPlayer("[KAMI DBG] verify failed. reason=" .. tostring(body.reason) .. " key=" .. tostring(KEY):sub(1,12))
     end
 end
 
 local scriptUrl = "https://kamidere-api.fly.dev/script?key=" .. KEY .. "&hwid=" .. hwid
 local ok2, scriptSrc = pcall(function() return httpFn({ Url = scriptUrl, Method = "GET" }) end)
-print("[kami] script fetch ok=" .. tostring(ok2) .. " body_start=" .. tostring(scriptSrc and scriptSrc.Body and scriptSrc.Body:sub(1,30) or "nil"))
 if not ok2 or not scriptSrc or not scriptSrc.Body or scriptSrc.Body:sub(1,2) == "--" then
-    kickPlayer("Invalid key\nMake a ticket in the discord server! \ndiscord.gg/kamidere")
+    kickPlayer("[KAMI DBG] script fetch failed. ok=" .. tostring(ok2) .. " body=" .. tostring(scriptSrc and scriptSrc.Body and scriptSrc.Body:sub(1,40) or "nil"))
 end
 loadstring(scriptSrc.Body)()
