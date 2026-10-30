@@ -17,7 +17,7 @@ app.get('/script', async (req, res) => {
 
   const { data, error } = await supabase
     .from('licenses')
-    .select('hwid, expires_at, blacklisted, frozen')
+    .select('*')
     .eq('key', key)
     .single();
 
