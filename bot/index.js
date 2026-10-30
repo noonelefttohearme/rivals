@@ -117,6 +117,94 @@ client.on('interactionCreate', async interaction => {
     });
   }
 
+  // ── FREEZE KEY ───────────────────────────────────────────────────────────────
+  if (interaction.isChatInputCommand() && interaction.commandName === 'freezekey') {
+    if (!interaction.member.roles.cache.has(GENERATE_ROLE))
+      return interaction.reply({ content: 'No permission.', ephemeral: true });
+
+    await interaction.deferReply({ ephemeral: true });
+    const target = interaction.options.getUser('user');
+    const keyOpt = interaction.options.getString('key');
+    const body = target ? { discord_id: target.id } : { key: keyOpt };
+    const data = await apiCall('POST', '/freezekey', body);
+
+    return interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(data.ok ? 0x5865f2 : COLORS.err)
+          .setTitle(data.ok ? '🧊  Key Frozen' : '❌  Error')
+          .setDescription(`> ${data.message}`)
+          .setFooter(footer())
+      ],
+    });
+  }
+
+  // ── UNFREEZE KEY ─────────────────────────────────────────────────────────────
+  if (interaction.isChatInputCommand() && interaction.commandName === 'unfreezekey') {
+    if (!interaction.member.roles.cache.has(GENERATE_ROLE))
+      return interaction.reply({ content: 'No permission.', ephemeral: true });
+
+    await interaction.deferReply({ ephemeral: true });
+    const target = interaction.options.getUser('user');
+    const keyOpt = interaction.options.getString('key');
+    const body = target ? { discord_id: target.id } : { key: keyOpt };
+    const data = await apiCall('POST', '/unfreezekey', body);
+
+    return interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(data.ok ? COLORS.green : COLORS.err)
+          .setTitle(data.ok ? '✅  Key Unfrozen' : '❌  Error')
+          .setDescription(`> ${data.message}`)
+          .setFooter(footer())
+      ],
+    });
+  }
+
+  // ── ADMIN RESET HWID ─────────────────────────────────────────────────────────
+  if (interaction.isChatInputCommand() && interaction.commandName === 'resethwid') {
+    if (!interaction.member.roles.cache.has(GENERATE_ROLE))
+      return interaction.reply({ content: 'No permission.', ephemeral: true });
+
+    await interaction.deferReply({ ephemeral: true });
+    const target = interaction.options.getUser('user');
+    const keyOpt = interaction.options.getString('key');
+    const body = target ? { discord_id: target.id } : { key: keyOpt };
+    const data = await apiCall('POST', '/admin-reset-hwid', body);
+
+    return interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(data.ok ? COLORS.green : COLORS.err)
+          .setTitle(data.ok ? '🔄  HWID Reset' : '❌  Error')
+          .setDescription(`> ${data.message}`)
+          .setFooter(footer())
+      ],
+    });
+  }
+
+  // ── WHITELIST ────────────────────────────────────────────────────────────────
+  if (interaction.isChatInputCommand() && interaction.commandName === 'whitelist') {
+    if (!interaction.member.roles.cache.has(GENERATE_ROLE))
+      return interaction.reply({ content: 'No permission.', ephemeral: true });
+
+    await interaction.deferReply({ ephemeral: true });
+    const target = interaction.options.getUser('user');
+    const keyOpt = interaction.options.getString('key');
+    const body = target ? { discord_id: target.id } : { key: keyOpt };
+    const data = await apiCall('POST', '/unblacklist', body);
+
+    return interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(data.ok ? COLORS.green : COLORS.err)
+          .setTitle(data.ok ? '✅  Whitelisted' : '❌  Error')
+          .setDescription(`> ${data.message}`)
+          .setFooter(footer())
+      ],
+    });
+  }
+
   // ── BLACKLIST ─────────────────────────────────────────────────────────────────
   if (interaction.isChatInputCommand() && interaction.commandName === 'blacklist') {
     if (!interaction.member.roles.cache.has(GENERATE_ROLE))

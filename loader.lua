@@ -59,6 +59,8 @@ local body = HttpService:JSONDecode(response.Body)
 if not body.valid then
     if body.reason == "blacklisted" then
         kickPlayer("YOU ARE BLACKLISTED!\n        KSY NIGGA")
+    elseif body.reason == "frozen" then
+        kickPlayer("Your key has been frozen.\nContact support: discord.gg/kamidere")
     elseif body.reason == "hwid_mismatch" then
         kickPlayer("HWID Mismatch please reset your HWID!")
     else

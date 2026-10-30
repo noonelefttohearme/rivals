@@ -18,5 +18,6 @@ create table if not exists licenses (
 
 alter table licenses disable row level security;
 
--- Run this if the table already exists:
+-- Run these if the table already exists:
 -- alter table licenses add column if not exists blacklisted boolean default false;
+-- alter table licenses add column if not exists frozen boolean default false;

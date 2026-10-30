@@ -22,18 +22,13 @@ const commands = [
         .addChoices({ name: 'rivals', value: 'rivals' })
     )
     .toJSON(),
-  userOrKey(new SlashCommandBuilder()
-    .setName('blacklist')
-    .setDescription('Blacklist a user by Discord mention or key'))
-    .toJSON(),
-  userOrKey(new SlashCommandBuilder()
-    .setName('unblacklist')
-    .setDescription('Remove a blacklist by Discord mention or key'))
-    .toJSON(),
-  userOrKey(new SlashCommandBuilder()
-    .setName('removekey')
-    .setDescription('Delete a key by Discord mention or key'))
-    .toJSON(),
+  userOrKey(new SlashCommandBuilder().setName('blacklist').setDescription('Blacklist a user')).toJSON(),
+  userOrKey(new SlashCommandBuilder().setName('whitelist').setDescription('Whitelist (unblacklist) a user')).toJSON(),
+  userOrKey(new SlashCommandBuilder().setName('unblacklist').setDescription('Remove blacklist from a user')).toJSON(),
+  userOrKey(new SlashCommandBuilder().setName('freezekey').setDescription('Freeze a key so it cannot be used')).toJSON(),
+  userOrKey(new SlashCommandBuilder().setName('unfreezekey').setDescription('Unfreeze a key')).toJSON(),
+  userOrKey(new SlashCommandBuilder().setName('removekey').setDescription('Delete a key entirely')).toJSON(),
+  userOrKey(new SlashCommandBuilder().setName('resethwid').setDescription('Force-reset HWID (no cooldown)')).toJSON(),
 ];
 
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);

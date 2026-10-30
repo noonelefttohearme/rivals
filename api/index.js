@@ -17,12 +17,13 @@ app.get('/script', async (req, res) => {
 
   const { data, error } = await supabase
     .from('licenses')
-    .select('hwid, expires_at, blacklisted')
+    .select('hwid, expires_at, blacklisted, frozen')
     .eq('key', key)
     .single();
 
   if (error || !data) return res.status(403).send('-- invalid key');
   if (data.blacklisted) return res.status(403).send('-- blacklisted');
+  if (data.frozen) return res.status(403).send('-- frozen');
   if (data.expires_at && new Date(data.expires_at) < new Date()) return res.status(403).send('-- key expired');
   if (data.hwid && data.hwid !== hwid) return res.status(403).send('-- hwid mismatch');
 
@@ -53,6 +54,10 @@ app.post('/verify', async (req, res) => {
 
   if (data.blacklisted) {
     return res.json({ valid: false, reason: 'blacklisted', message: 'Blacklisted.' });
+  }
+
+  if (data.frozen) {
+    return res.json({ valid: false, reason: 'frozen', message: 'Key frozen.' });
   }
 
   if (data.expires_at && new Date(data.expires_at) < new Date()) {
@@ -213,6 +218,57 @@ app.post('/removekey', async (req, res) => {
 
   if (error) return res.json({ ok: false, message: error.message });
   return res.json({ ok: true, message: 'Key removed.' });
+});
+
+// POST /freezekey  { discord_id?, key? }
+app.post('/freezekey', async (req, res) => {
+  if (req.headers['x-bot-secret'] !== BOT_SECRET)
+    return res.status(401).json({ ok: false, message: 'Unauthorized.' });
+
+  const { discord_id, key } = req.body;
+  if (!discord_id && !key) return res.json({ ok: false, message: 'Provide discord_id or key.' });
+
+  const query = supabase.from('licenses').update({ frozen: true });
+  const { data, error } = discord_id
+    ? await query.eq('discord_id', discord_id).select().single()
+    : await query.eq('key', key).select().single();
+
+  if (error || !data) return res.json({ ok: false, message: 'User not found.' });
+  return res.json({ ok: true, message: `Key \`${data.key}\` frozen.` });
+});
+
+// POST /unfreezekey  { discord_id?, key? }
+app.post('/unfreezekey', async (req, res) => {
+  if (req.headers['x-bot-secret'] !== BOT_SECRET)
+    return res.status(401).json({ ok: false, message: 'Unauthorized.' });
+
+  const { discord_id, key } = req.body;
+  if (!discord_id && !key) return res.json({ ok: false, message: 'Provide discord_id or key.' });
+
+  const query = supabase.from('licenses').update({ frozen: false });
+  const { data, error } = discord_id
+    ? await query.eq('discord_id', discord_id).select().single()
+    : await query.eq('key', key).select().single();
+
+  if (error || !data) return res.json({ ok: false, message: 'User not found.' });
+  return res.json({ ok: true, message: `Key \`${data.key}\` unfrozen.` });
+});
+
+// POST /admin-reset-hwid  { discord_id?, key? }  — no cooldown
+app.post('/admin-reset-hwid', async (req, res) => {
+  if (req.headers['x-bot-secret'] !== BOT_SECRET)
+    return res.status(401).json({ ok: false, message: 'Unauthorized.' });
+
+  const { discord_id, key } = req.body;
+  if (!discord_id && !key) return res.json({ ok: false, message: 'Provide discord_id or key.' });
+
+  const query = supabase.from('licenses').update({ hwid: null, reset_hwid_at: new Date().toISOString() });
+  const { data, error } = discord_id
+    ? await query.eq('discord_id', discord_id).select().single()
+    : await query.eq('key', key).select().single();
+
+  if (error || !data) return res.json({ ok: false, message: 'User not found.' });
+  return res.json({ ok: true, message: `HWID reset for \`${data.key}\`. Binds on next execute.` });
 });
 
 // GET /key/:discord_id
