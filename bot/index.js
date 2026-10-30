@@ -125,7 +125,7 @@ client.on('interactionCreate', async interaction => {
       });
     }
     const key = data.key;
-    const snippet = `_G.KAMI_KEY = "${key}"\nloadstring(game:HttpGet("https://raw.githubusercontent.com/iwishpeoplelovedmeforme/kami/main/loader.lua"))()`;
+    const snippet = `_G.KAMI_KEY = "${key}"\nloadstring(game:HttpGet("https://raw.githubusercontent.com/noonelefttohearme/rivals/main/loader.lua"))()`;
     return interaction.editReply({
       embeds: [
         new EmbedBuilder()

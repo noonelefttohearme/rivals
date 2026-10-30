@@ -35,7 +35,7 @@ It will open a browser. Create a free account (no card needed for free tier).
 
 First, download the repo if you haven't:
 ```
-git clone https://github.com/iwishpeoplelovedmeforme/kami.git
+git clone https://github.com/noonelefttohearme/rivals.git
 cd kami\api
 ```
 Then run:
@@ -95,7 +95,7 @@ CLIENT_ID=your_application_id
 GUILD_ID=your_discord_server_id
 API_URL=https://kamidere-api.fly.dev
 BOT_SECRET=makeuparandomlongstring123
-SCRIPT_URL=https://raw.githubusercontent.com/iwishpeoplelovedmeforme/kami/main/loader.lua
+SCRIPT_URL=https://raw.githubusercontent.com/noonelefttohearme/rivals/main/loader.lua
 HUB_NAME=kamidere
 KAMIDERE_EMOJI_ID=your_kamidere_emoji_id
 ```
