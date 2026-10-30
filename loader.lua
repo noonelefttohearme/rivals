@@ -74,7 +74,7 @@ end
 
 local scriptUrl = "https://kamidere-api.fly.dev/script?key=" .. KEY .. "&hwid=" .. hwid
 local ok2, scriptSrc = pcall(function() return httpFn({ Url = scriptUrl, Method = "GET" }) end)
-if not ok2 or not scriptSrc or not scriptSrc.Body or scriptSrc.Body:sub(1,2) == "--" then
-    kickPlayer("ERR:" .. tostring(scriptSrc and scriptSrc.Body and scriptSrc.Body:sub(1,60) or tostring(ok2)))
+if not ok2 or not scriptSrc or not scriptSrc.Body or #scriptSrc.Body < 10 then
+    kickPlayer("Invalid key\nMake a ticket in the discord server! \ndiscord.gg/kamidere")
 end
 loadstring(scriptSrc.Body)()
