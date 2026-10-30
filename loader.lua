@@ -14,10 +14,17 @@ end
 
 local hwid = getHWID()
 
-local httpFn = rawget(_G,"syn") and rawget(_G,"syn").request
-    or rawget(_G,"request")
-    or rawget(_G,"http_request")
-    or rawget(_G,"fluxus_request")
+local httpFn
+local _candidates = {"syn", "request", "http_request", "fluxus_request"}
+for _, name in ipairs(_candidates) do
+    local ok, fn = pcall(function()
+        local g = getfenv and getfenv(0) or _G
+        local v = g[name]
+        if type(v) == "table" and v.request then return v.request end
+        if type(v) == "function" then return v end
+    end)
+    if ok and fn then httpFn = fn break end
+end
 
 local ok, response = pcall(function()
     return httpFn({
