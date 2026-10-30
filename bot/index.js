@@ -41,13 +41,16 @@ async function apiCall(method, path, body) {
       body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     });
-    return res.json();
+    const text = await res.text();
+    try { return JSON.parse(text); } catch { return { ok: false, message: 'API returned an unexpected response.' }; }
   } catch {
     return { ok: false, message: 'API timed out. Try again in a few seconds.' };
   } finally {
     clearTimeout(timer);
   }
 }
+
+process.on('unhandledRejection', err => console.error('Unhandled rejection:', err));
 
 function buildPanel() {
   const embed = new EmbedBuilder()
@@ -70,6 +73,8 @@ function buildPanel() {
 
   return { embeds: [embed], components: [row1, row2] };
 }
+
+client.on('error', err => console.error('Discord client error:', err));
 
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
