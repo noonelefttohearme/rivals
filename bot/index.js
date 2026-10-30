@@ -117,6 +117,72 @@ client.on('interactionCreate', async interaction => {
     });
   }
 
+  // ── BLACKLIST ─────────────────────────────────────────────────────────────────
+  if (interaction.isChatInputCommand() && interaction.commandName === 'blacklist') {
+    if (!interaction.member.roles.cache.has(GENERATE_ROLE))
+      return interaction.reply({ content: 'No permission.', ephemeral: true });
+
+    await interaction.deferReply({ ephemeral: true });
+    const target = interaction.options.getUser('user');
+    const keyOpt = interaction.options.getString('key');
+    const body = target ? { discord_id: target.id } : { key: keyOpt };
+    const data = await apiCall('POST', '/blacklist', body);
+
+    return interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(data.ok ? COLORS.err : COLORS.err)
+          .setTitle(data.ok ? '🚫  Blacklisted' : '❌  Error')
+          .setDescription(`> ${data.message}`)
+          .setFooter(footer())
+      ],
+    });
+  }
+
+  // ── UNBLACKLIST ───────────────────────────────────────────────────────────────
+  if (interaction.isChatInputCommand() && interaction.commandName === 'unblacklist') {
+    if (!interaction.member.roles.cache.has(GENERATE_ROLE))
+      return interaction.reply({ content: 'No permission.', ephemeral: true });
+
+    await interaction.deferReply({ ephemeral: true });
+    const target = interaction.options.getUser('user');
+    const keyOpt = interaction.options.getString('key');
+    const body = target ? { discord_id: target.id } : { key: keyOpt };
+    const data = await apiCall('POST', '/unblacklist', body);
+
+    return interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(data.ok ? COLORS.green : COLORS.err)
+          .setTitle(data.ok ? '✅  Unblacklisted' : '❌  Error')
+          .setDescription(`> ${data.message}`)
+          .setFooter(footer())
+      ],
+    });
+  }
+
+  // ── REMOVE KEY ────────────────────────────────────────────────────────────────
+  if (interaction.isChatInputCommand() && interaction.commandName === 'removekey') {
+    if (!interaction.member.roles.cache.has(GENERATE_ROLE))
+      return interaction.reply({ content: 'No permission.', ephemeral: true });
+
+    await interaction.deferReply({ ephemeral: true });
+    const target = interaction.options.getUser('user');
+    const keyOpt = interaction.options.getString('key');
+    const body = target ? { discord_id: target.id } : { key: keyOpt };
+    const data = await apiCall('POST', '/removekey', body);
+
+    return interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(data.ok ? COLORS.gold : COLORS.err)
+          .setTitle(data.ok ? '🗑️  Key Removed' : '❌  Error')
+          .setDescription(`> ${data.message}`)
+          .setFooter(footer())
+      ],
+    });
+  }
+
   if (!interaction.isButton() && !interaction.isModalSubmit()) return;
 
   const userId = interaction.user.id;

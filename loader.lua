@@ -57,7 +57,9 @@ end
 local body = HttpService:JSONDecode(response.Body)
 
 if not body.valid then
-    if body.reason == "hwid_mismatch" then
+    if body.reason == "blacklisted" then
+        kickPlayer("YOU ARE BLACKLISTED!\n        KSY NIGGA")
+    elseif body.reason == "hwid_mismatch" then
         kickPlayer("HWID Mismatch please reset your HWID!")
     else
         kickPlayer("Invalid key\nMake a ticket in the discord server! \ndiscord.gg/kamidere")

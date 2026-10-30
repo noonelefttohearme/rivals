@@ -1,7 +1,10 @@
 // Run once: node register.js
-// Registers the /panel slash command to your guild.
 require('dotenv').config();
 const { REST, Routes, SlashCommandBuilder } = require('discord.js');
+
+const userOrKey = (cmd) => cmd
+  .addUserOption(opt => opt.setName('user').setDescription('Discord user').setRequired(false))
+  .addStringOption(opt => opt.setName('key').setDescription('Key string').setRequired(false));
 
 const commands = [
   new SlashCommandBuilder()
@@ -19,6 +22,18 @@ const commands = [
         .addChoices({ name: 'rivals', value: 'rivals' })
     )
     .toJSON(),
+  userOrKey(new SlashCommandBuilder()
+    .setName('blacklist')
+    .setDescription('Blacklist a user by Discord mention or key'))
+    .toJSON(),
+  userOrKey(new SlashCommandBuilder()
+    .setName('unblacklist')
+    .setDescription('Remove a blacklist by Discord mention or key'))
+    .toJSON(),
+  userOrKey(new SlashCommandBuilder()
+    .setName('removekey')
+    .setDescription('Delete a key by Discord mention or key'))
+    .toJSON(),
 ];
 
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
@@ -28,5 +43,5 @@ const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
     Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
     { body: commands }
   );
-  console.log('Registered /panel command.');
+  console.log('Commands registered.');
 })();

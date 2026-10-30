@@ -17,11 +17,12 @@ app.get('/script', async (req, res) => {
 
   const { data, error } = await supabase
     .from('licenses')
-    .select('hwid, expires_at')
+    .select('hwid, expires_at, blacklisted')
     .eq('key', key)
     .single();
 
   if (error || !data) return res.status(403).send('-- invalid key');
+  if (data.blacklisted) return res.status(403).send('-- blacklisted');
   if (data.expires_at && new Date(data.expires_at) < new Date()) return res.status(403).send('-- key expired');
   if (data.hwid && data.hwid !== hwid) return res.status(403).send('-- hwid mismatch');
 
@@ -49,6 +50,10 @@ app.post('/verify', async (req, res) => {
     .single();
 
   if (error || !data) return res.json({ valid: false, reason: 'invalid_key', message: 'Invalid key.' });
+
+  if (data.blacklisted) {
+    return res.json({ valid: false, reason: 'blacklisted', message: 'Blacklisted.' });
+  }
 
   if (data.expires_at && new Date(data.expires_at) < new Date()) {
     return res.json({ valid: false, reason: 'expired', message: 'Key expired.' });
@@ -157,6 +162,57 @@ app.post('/generate', async (req, res) => {
   if (error) return res.json({ ok: false, message: `Failed to generate key: ${error.message}` });
 
   return res.json({ ok: true, key, script_type });
+});
+
+// POST /blacklist  { discord_id?, key? }
+app.post('/blacklist', async (req, res) => {
+  if (req.headers['x-bot-secret'] !== BOT_SECRET)
+    return res.status(401).json({ ok: false, message: 'Unauthorized.' });
+
+  const { discord_id, key } = req.body;
+  if (!discord_id && !key) return res.json({ ok: false, message: 'Provide discord_id or key.' });
+
+  const query = supabase.from('licenses').update({ blacklisted: true });
+  const { data, error } = discord_id
+    ? await query.eq('discord_id', discord_id).select().single()
+    : await query.eq('key', key).select().single();
+
+  if (error || !data) return res.json({ ok: false, message: 'User not found.' });
+  return res.json({ ok: true, message: `Blacklisted \`${data.key}\`.` });
+});
+
+// POST /unblacklist  { discord_id?, key? }
+app.post('/unblacklist', async (req, res) => {
+  if (req.headers['x-bot-secret'] !== BOT_SECRET)
+    return res.status(401).json({ ok: false, message: 'Unauthorized.' });
+
+  const { discord_id, key } = req.body;
+  if (!discord_id && !key) return res.json({ ok: false, message: 'Provide discord_id or key.' });
+
+  const query = supabase.from('licenses').update({ blacklisted: false });
+  const { data, error } = discord_id
+    ? await query.eq('discord_id', discord_id).select().single()
+    : await query.eq('key', key).select().single();
+
+  if (error || !data) return res.json({ ok: false, message: 'User not found.' });
+  return res.json({ ok: true, message: `Unblacklisted \`${data.key}\`.` });
+});
+
+// POST /removekey  { discord_id?, key? }
+app.post('/removekey', async (req, res) => {
+  if (req.headers['x-bot-secret'] !== BOT_SECRET)
+    return res.status(401).json({ ok: false, message: 'Unauthorized.' });
+
+  const { discord_id, key } = req.body;
+  if (!discord_id && !key) return res.json({ ok: false, message: 'Provide discord_id or key.' });
+
+  const query = supabase.from('licenses').delete();
+  const { error } = discord_id
+    ? await query.eq('discord_id', discord_id)
+    : await query.eq('key', key);
+
+  if (error) return res.json({ ok: false, message: error.message });
+  return res.json({ ok: true, message: 'Key removed.' });
 });
 
 // GET /key/:discord_id
