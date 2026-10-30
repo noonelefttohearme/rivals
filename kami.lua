@@ -491236,10 +491236,6 @@ end)
         end)
     end)
     UI.addButton(savedSec, "Refresh", function() _cfgDropdown.refreshOptions(_listConfigs()) end)
-    UI.addButton(savedSec, "Show Original UI", function()
-        local l = getgenv().Library
-        if l and typeof(l.ScreenGui)=="Instance" then l.ScreenGui.Enabled = not l.ScreenGui.Enabled end
-    end)
 
     -- Logo: hide archnem icon, gold placeholder at ZIndex=8 (above dragButton ZIndex=7)
     titleIcon.ImageTransparency = 1; titleIcon.Image = ""
@@ -491512,12 +491508,6 @@ end)
                 end
             end
             if _total == 0 then
-                pcall(function()
-                    local s=UI.createSection(_tabObjects[1],"show original ui")
-                    UI.addButton(s,"open",function()
-                        local l=getgenv().Library; if l and l.ScreenGui then l.ScreenGui.Enabled=not l.ScreenGui.Enabled end
-                    end)
-                end)
             end
         end)
     end)
