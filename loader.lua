@@ -1,6 +1,6 @@
 -- kamidere loader
 
-local KEY = _G.KAMI_KEY or "KAMI-XXXX-XXXX-XXXX"
+local KEY = (getgenv and getgenv().KAMI_KEY) or rawget(_G, "KAMI_KEY") or "KAMI-XXXX-XXXX-XXXX"
 local API = "https://kamidere-api.fly.dev/verify"
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
