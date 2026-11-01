@@ -10355,13 +10355,18 @@ Library:init_config(window)
 
 initProceduralDrawings()
 
-local stepConn = RunService.Heartbeat:Connect(function()
+local _rageTick = 0
+local stepConn = RunService.Heartbeat:Connect(function(dt)
     if meowState.Destroyed then return end
     Camera = Workspace.CurrentCamera or Camera
     pcall(get_target)
     pcall(runCombatAimbot)
-    pcall(function() runRagebotCombat(0) end)
-    pcall(runMeleeAura)
+    _rageTick = _rageTick + dt
+    if _rageTick >= 0.05 then
+        _rageTick = 0
+        pcall(function() runRagebotCombat(0) end)
+        pcall(runMeleeAura)
+    end
     pcall(updateTargetVisuals)
     pcall(updateWeaponVisuals)
     pcall(runAutoLoadout)
@@ -15486,9 +15491,6 @@ pcall(function()
         flags.triggerbot_enabled     = false
         flags.fake_position_enabled  = false
         if typeof(setFakePosition) == "function" then pcall(setFakePosition, false) end
-        if flags.FakePosition and typeof(setFakePosition) == "function" then
-            pcall(setFakePosition, flags.FakePosition)
-        end
         if Library and Library.notifications then
             task.spawn(function()
                 task.wait(0.2)
