@@ -19,6 +19,20 @@ local Camera = Workspace.CurrentCamera
 getgenv().meow_flags = {}
 local flags = getgenv().meow_flags
 
+-- Rescue from previous void-spam underground state
+pcall(function()
+    getgenv().position_desync_source = nil
+    getgenv().v2_tp_pos = nil
+    getgenv().FakePositionEnabled = false
+    getgenv().HideUndergroundEnabled = false
+    local char = (Players and Players.LocalPlayer) and Players.LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if root and root.Position.Y < 5 then
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.CFrame = CFrame.new(root.Position.X, 10, root.Position.Z)
+    end
+end)
+
 -- Screenshot Ragebot Methods
 flags.ragebot_enabled           = false
 flags.ragebot_void_spam         = false
@@ -15385,30 +15399,43 @@ task.spawn(initCosmeticChangerPill)
 task.spawn(function()
     local pg = LocalPlayer:WaitForChild("PlayerGui", 15)
     if not pg then return end
-    local function hidecrackedBy()
+    local stripped = function(s) return tostring(s):gsub("<[^>]+>", ""):lower() end
+    local function killGui(v)
+        local p = v
+        while p and p.Parent and not p.Parent:IsA("PlayerGui") and not p.Parent:IsA("CoreGui") do
+            p = p.Parent
+        end
         pcall(function()
-            for _, gui in ipairs(pg:GetChildren()) do
-                if gui:IsA("ScreenGui") or gui:IsA("BillboardGui") then
-                    for _, v in ipairs(gui:GetDescendants()) do
-                        if (v:IsA("TextLabel") or v:IsA("TextButton") or v:IsA("Frame")) then
-                            local ok, txt = pcall(function() return v.Text end)
-                            if ok and txt then
-                                local low = txt:lower()
-                                if low:find("cracked by") or low:find("join discord") then
-                                    pcall(function() gui.Enabled = false end)
-                                end
-                            end
-                        end
+            if p and p ~= pg then
+                p.Enabled = false
+                if p:IsA("Frame") or p:IsA("ImageLabel") or p:IsA("TextLabel") then
+                    p.Visible = false
+                end
+            end
+        end)
+    end
+    local function scan()
+        pcall(function()
+            for _, v in ipairs(pg:GetDescendants()) do
+                local ok, txt = pcall(function() return v.Text end)
+                if ok and txt then
+                    local s = stripped(txt)
+                    if s:find("cracked by") or s:find("join discord") then
+                        killGui(v)
                     end
                 end
             end
         end)
     end
-    task.wait(1)
-    hidecrackedBy()
-    pg.ChildAdded:Connect(function()
-        task.wait(0.5)
-        hidecrackedBy()
+    task.wait(1) scan()
+    task.wait(2) scan()
+    pg.DescendantAdded:Connect(function(v)
+        task.wait(0.3)
+        local ok, txt = pcall(function() return v.Text end)
+        if ok and txt then
+            local s = stripped(txt)
+            if s:find("cracked by") or s:find("join discord") then killGui(v) end
+        end
     end)
 end)
 
