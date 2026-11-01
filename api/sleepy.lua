@@ -20,12 +20,12 @@ getgenv().meow_flags = getgenv().meow_flags or {}
 local flags = getgenv().meow_flags
 
 -- Screenshot Ragebot Methods
-flags.ragebot_enabled           = true
-flags.ragebot_void_spam         = true
-flags.voidspam_enabled          = true
-flags.teleport_v2_origin        = true
+flags.ragebot_enabled           = false
+flags.ragebot_void_spam         = false
+flags.voidspam_enabled          = false
+flags.teleport_v2_origin        = false
 flags.wallbang_method           = "Teleport V2"
-flags.silent_wallbang           = true
+flags.silent_wallbang           = false
 flags.ragebot_void_spam_method  = "Aggressive"
 flags.ragebot_void_spam_hide    = 0.25
 flags.ragebot_shoot_attempts    = 2
@@ -41,9 +41,9 @@ flags.ragebot_tp_y              = -7
 flags.ragebot_tp_z              = -5
 
 -- Screenshot Anti-Aim Methods
-flags.antiaim_client_wont_see   = true
+flags.antiaim_client_wont_see   = false
 flags.antiaim_enabled           = false
-flags.antiaim_hidehead          = true
+flags.antiaim_hidehead          = false
 flags.antiaim_rapid_body        = false
 flags.pitch_type                = "Up & Down"
 flags.antiaim_preset            = "None"
@@ -7553,7 +7553,7 @@ do
 
     secRageMain:toggle({
         name      = "void spam",
-        default   = true,
+        default   = false,
         seperator = true,
         callback  = function(v) flags.ragebot_void_spam = v end
     })
@@ -7739,7 +7739,7 @@ do
 
     secExploits:toggle({
         name      = "Teleport V2 Origin",
-        default   = true,
+        default   = false,
         seperator = true,
         callback  = function(v) flags.teleport_v2_origin = v end
     })
@@ -8028,7 +8028,7 @@ do
 
     secAAMain:toggle({
         name      = "client wont see changes",
-        default   = true,
+        default   = false,
         seperator = true,
         callback  = function(v) flags.antiaim_client_wont_see = v end
     })
@@ -8048,7 +8048,7 @@ do
 
     secAAMain:toggle({
         name      = "hide head",
-        default   = true,
+        default   = false,
         seperator = true,
         callback  = function(v) flags.antiaim_hidehead = v end
     })
@@ -8203,7 +8203,7 @@ do
 
     secVM:toggle({
         name      = "show cosmetics changer",
-        default   = true,
+        default   = false,
         seperator = true,
         callback  = function(v)
             flags.show_cosmetics_changer = v
@@ -9885,7 +9885,7 @@ do
 
     secFPCloak:toggle({
         name      = "Freeze Desync Animation Pose (Flat Hitbox)",
-        default   = true,
+        default   = false,
         seperator = true,
         callback  = function(v)
             fakePos.AnimationDesync = v
