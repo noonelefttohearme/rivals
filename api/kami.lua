@@ -3727,7 +3727,8 @@
     --
 -- 
 
-return library--[[
+
+--[[
     kamidere (UE) - Cracked / Cleaned Build
     Game: Roblox Rivals
     Cleaned build: key check bypassed, anti-debug removed, header/spam stripped.
