@@ -16,13 +16,15 @@ local HttpService = cloneref and cloneref(game:GetService("HttpService")) or gam
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
-getgenv().meow_flags = getgenv().meow_flags or {}
+getgenv().meow_flags = {}
 local flags = getgenv().meow_flags
 
 -- Screenshot Ragebot Methods
 flags.ragebot_enabled           = false
 flags.ragebot_void_spam         = false
 flags.voidspam_enabled          = false
+flags.voidspam                  = false
+flags.ragebot                   = false
 flags.teleport_v2_origin        = false
 flags.wallbang_method           = "Teleport V2"
 flags.silent_wallbang           = false
