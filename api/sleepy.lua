@@ -15377,7 +15377,7 @@ local function initCosmeticChangerPill()
 end
 
 task.spawn(initMusicPlayer)
-task.spawn(initKeybindsWidget)
+-- task.spawn(initKeybindsWidget)
 task.spawn(initCosmeticChangerPill)
 
 -- Auto-load user's custom config on startup (Synchronous)
