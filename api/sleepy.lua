@@ -19,10 +19,10 @@ local Camera = Workspace.CurrentCamera
 getgenv().meow_flags = {}
 local flags = getgenv().meow_flags
 
--- Wipe saved config so it can't re-enable combat features
+-- Wipe the auto-save config so it can't re-enable combat features on startup
 pcall(function()
-    for _, p in ipairs({ "Sleepy.gg/configs/UserActiveConfig.json", "sleepy/configs/default.cfg" }) do
-        if isfile and isfile(p) then delfile(p) end
+    if isfile and isfile("Sleepy.gg/configs/UserActiveConfig.json") then
+        delfile("Sleepy.gg/configs/UserActiveConfig.json")
     end
 end)
 
