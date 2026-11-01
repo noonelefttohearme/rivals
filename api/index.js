@@ -6,7 +6,7 @@ const path = require('path');
 const app = express();
 app.use(express.json());
 
-const SCRIPT_SOURCE = fs.readFileSync(path.join(__dirname, 'sleepy.lua'), 'utf8');
+const SCRIPT_SOURCE = fs.readFileSync(path.join(__dirname, 'kami.lua'), 'utf8');
 
 app.get('/ping', (req, res) => res.json({ ok: true, version: 2 }));
 
