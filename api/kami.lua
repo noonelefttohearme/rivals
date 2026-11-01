@@ -3766,12 +3766,13 @@ local window = library:window({
 })
 
 -----------------------------------------------------------------------
--- RAGEBOT
+-- AIM  (Ragebot / Silent Aim / Aimbot / Triggerbot)
 -----------------------------------------------------------------------
-local rb_main, rb_settings = window:tab({ name = "Ragebot", icon = ICO.aim, tabs = { "Main", "Settings" } })
+local rb_p, sa_p, ab_p, trig_p = window:tab({ name = "Aim", icon = ICO.aim, tabs = { "Ragebot", "Silent Aim", "Aimbot", "Triggerbot" } })
 
+-- RAGEBOT
 do
-    local col = rb_main:column({})
+    local col = rb_p:column({})
     local sec = col:section({ name = "Ragebot", size = 1, icon = ICO.aim, default = true })
     sec:toggle({  name = "Enabled",                   flag = "ragebot_enabled",               default = false })
     sec:keybind({ name = "Keybind",                   flag = "ragebot_keybind",               key = nil, mode = "Toggle" })
@@ -3793,43 +3794,36 @@ do
     sec2:toggle({  name = "Fake Position Engine",     flag = "Fake Position Engine",          default = false })
     sec2:slider({  name = "Camera Elevation",         flag = "FakePosCameraElevation",        min = -20, max = 20, default = 0, interval = 0.5 })
     sec2:dropdown({name = "Hitbox Orientation",       flag = "Hitbox Orientation Desync",     items = { "None", "Jitter", "Spin", "Backwards" }, default = "None" })
+
+    local sec3 = col:section({ name = "Targeting", size = 1, icon = ICO.aim, default = false })
+    sec3:dropdown({name = "Priority Targets",         flag = "ragebot_priority_targets",      items = { "Closest to Crosshair", "Lowest HP", "Smart Lowest HP", "Nearest" }, default = "Closest to Crosshair" })
+    sec3:toggle({  name = "Visible Only",             flag = "targeting_visibleonly",         default = false })
+    sec3:toggle({  name = "Limit Distance",           flag = "targeting_limitdistance",       default = false })
+    sec3:slider({  name = "Max Distance",             flag = "targeting_maxdistance",         min = 0, max = 1000, default = 500, interval = 1 })
+    sec3:dropdown({name = "Target Part",              flag = "targeting_part",                items = { "Head", "Torso", "HumanoidRootPart", "Nearest" }, default = "Head" })
+    sec3:dropdown({name = "Target Method",            flag = "target method",                 items = { "Camera", "Crosshair" }, default = "Camera" })
+    sec3:toggle({  name = "Disable Flash",            flag = "targeting_disableflash",        default = false })
+    sec3:toggle({  name = "Ignore Protected",         flag = "targeting_ignore_protected",    default = false })
+    sec3:toggle({  name = "No Delay Between Targets", flag = "no delay between targets",      default = false })
+    sec3:toggle({  name = "Prefer Projectile Weapon", flag = "prefer projectile weapon",      default = false })
+    sec3:dropdown({name = "Part Blacklist",           flag = "targeting_closest_part_blacklist", items = { "None", "Arms", "Legs" }, default = "None" })
+    sec3:toggle({  name = "Wall Check",               flag = "Wall Check",                    default = false })
+
+    local sec4 = col:section({ name = "Target Highlight", size = 1, icon = ICO.aim, default = false })
+    sec4:toggle({ name = "Enabled",                   flag = "target_highlight",              default = false })
+    sec4:toggle({ name = "Fill",                      flag = "target_highlight_fill",         default = false })
+    sec4:toggle({ name = "Outline",                   flag = "target_highlight_outline",      default = true })
+    sec4:dropdown({name = "Type",                     flag = "target_highlight_type",         items = { "Box", "Circle", "Highlight" }, default = "Box" })
+
+    local sec5 = col:section({ name = "Hit Notify", size = 1, icon = ICO.aim, default = false })
+    sec5:toggle({ name = "Enabled",                   flag = "target_hit_notify",             default = false })
+    sec5:slider({ name = "Duration",                  flag = "target_hit_notify_duration",    min = 0.5, max = 5, default = 1, interval = 0.5, suffix = "s" })
+    sec5:dropdown({name = "Text",                     flag = "target_hit_notify_text",        items = { "Hit!", "damage ratio", "fortnite damage" }, default = "Hit!" })
 end
 
-do
-    local col = rb_settings:column({})
-    local sec = col:section({ name = "Targeting", size = 1, icon = ICO.aim, default = true })
-    sec:dropdown({name = "Priority Targets",          flag = "ragebot_priority_targets",      items = { "Closest to Crosshair", "Lowest HP", "Smart Lowest HP", "Nearest" }, default = "Closest to Crosshair" })
-    sec:toggle({  name = "Visible Only",              flag = "targeting_visibleonly",         default = false })
-    sec:toggle({  name = "Limit Distance",            flag = "targeting_limitdistance",       default = false })
-    sec:slider({  name = "Max Distance",              flag = "targeting_maxdistance",         min = 0, max = 1000, default = 500, interval = 1 })
-    sec:dropdown({name = "Target Part",               flag = "targeting_part",                items = { "Head", "Torso", "HumanoidRootPart", "Nearest" }, default = "Head" })
-    sec:dropdown({name = "Target Method",             flag = "target method",                 items = { "Camera", "Crosshair" }, default = "Camera" })
-    sec:toggle({  name = "Disable Flash",             flag = "targeting_disableflash",        default = false })
-    sec:toggle({  name = "Ignore Protected",          flag = "targeting_ignore_protected",    default = false })
-    sec:toggle({  name = "No Delay Between Targets",  flag = "no delay between targets",      default = false })
-    sec:toggle({  name = "Prefer Projectile Weapon",  flag = "prefer projectile weapon",      default = false })
-    sec:dropdown({name = "Part Blacklist",            flag = "targeting_closest_part_blacklist", items = { "None", "Arms", "Legs" }, default = "None" })
-    sec:toggle({  name = "Wall Check",                flag = "Wall Check",                    default = false })
-
-    local sec2 = col:section({ name = "Target Highlight", size = 1, icon = ICO.aim, default = false })
-    sec2:toggle({ name = "Enabled",                   flag = "target_highlight",              default = false })
-    sec2:toggle({ name = "Fill",                      flag = "target_highlight_fill",         default = false })
-    sec2:toggle({ name = "Outline",                   flag = "target_highlight_outline",      default = true })
-    sec2:dropdown({name = "Type",                     flag = "target_highlight_type",         items = { "Box", "Circle", "Highlight" }, default = "Box" })
-
-    local sec3 = col:section({ name = "Hit Notify", size = 1, icon = ICO.aim, default = false })
-    sec3:toggle({ name = "Enabled",                   flag = "target_hit_notify",             default = false })
-    sec3:slider({ name = "Duration",                  flag = "target_hit_notify_duration",    min = 0.5, max = 5, default = 1, interval = 0.5, suffix = "s" })
-    sec3:dropdown({name = "Text",                     flag = "target_hit_notify_text",        items = { "Hit!", "damage ratio", "fortnite damage" }, default = "Hit!" })
-end
-
------------------------------------------------------------------------
 -- SILENT AIM
------------------------------------------------------------------------
-local sa_main = window:tab({ name = "Silent Aim", icon = ICO.aim, tabs = { "Main" } })
-
 do
-    local col = sa_main:column({})
+    local col = sa_p:column({})
     local sec = col:section({ name = "Silent Aim", size = 1, icon = ICO.aim, default = true })
     sec:toggle({  name = "Enabled",                   flag = "silent_toggle",                 default = false })
     sec:keybind({ name = "Keybind",                   flag = "silent_keybind",                key = nil, mode = "Toggle" })
@@ -3847,18 +3841,14 @@ do
     sec:slider({  name = "FOV Rotation Speed",        flag = "silent_fov_rotation_speed",     min = 0, max = 10, default = 0, interval = 0.1 })
 end
 
------------------------------------------------------------------------
 -- AIMBOT
------------------------------------------------------------------------
-local ab_main = window:tab({ name = "Aimbot", icon = ICO.aim, tabs = { "Main" } })
-
 do
-    local col = ab_main:column({})
+    local col = ab_p:column({})
     local sec = col:section({ name = "Legit Aimbot", size = 1, icon = ICO.aim, default = true })
     sec:toggle({  name = "Enable Aimbot",             flag = "aimbot_toggle",                 default = false })
     sec:keybind({ name = "Aim Keybind",               flag = "aimbot_keybind",                key = nil, mode = "Hold" })
     sec:slider({  name = "Aimbot FOV",                flag = "aimbot_radius",                 min = 0, max = 360, default = 90, interval = 1, suffix = "°" })
-    sec:toggle({  name = "Visualise Aimbot FOV",      flag = "aimbot_showfov",                default = false })
+    sec:toggle({  name = "Visualise FOV",             flag = "aimbot_showfov",                default = false })
     sec:slider({  name = "Smoothness",                flag = "aimbot_delay_smooth_x",         min = 0, max = 1, default = 0.1, interval = 0.01 })
     sec:slider({  name = "Smoothness Y",              flag = "aimbot_delay_smooth_y",         min = 0, max = 1, default = 0.1, interval = 0.01 })
     sec:toggle({  name = "Smoothing",                 flag = "aimbot_smoothing",              default = true })
@@ -3874,13 +3864,9 @@ do
     sec:slider({  name = "Recoil Percent",            flag = "recoil percent",                min = 0, max = 100, default = 0, interval = 1, suffix = "%" })
 end
 
------------------------------------------------------------------------
 -- TRIGGERBOT
------------------------------------------------------------------------
-local trig_main, trig_settings = window:tab({ name = "Triggerbot", icon = ICO.aim, tabs = { "Main", "Settings" } })
-
 do
-    local col = trig_main:column({})
+    local col = trig_p:column({})
     local sec = col:section({ name = "Triggerbot", size = 1, icon = ICO.aim, default = true })
     sec:toggle({  name = "Enable Triggerbot",         flag = "triggerbot_enabled",            default = false })
     sec:keybind({ name = "Keybind",                   flag = "triggerbot_keybind",            key = nil, mode = "Toggle" })
@@ -3893,22 +3879,18 @@ do
     sec:toggle({  name = "Hide Between Targets",      flag = "hide between targets",          default = false })
     sec:toggle({  name = "Auto Handoff On Shoot",     flag = "tb_auto_handoff",               default = false })
     sec:dropdown({name = "Part Blacklist",            flag = "triggerbot_part_blacklist",     items = { "None", "Legs", "Arms" }, default = "None" })
-end
 
-do
-    local col = trig_settings:column({})
-    local sec = col:section({ name = "Targeting", size = 1, icon = ICO.aim, default = true })
-    sec:toggle({ name = "Visible Only",               flag = "tb_visibleonly",                default = false })
-    sec:toggle({ name = "Wall Check",                 flag = "tb_wall_check",                 default = false })
-    sec:toggle({ name = "Ignore Protected",           flag = "tb_ignore_protected",           default = false })
+    local sec2 = col:section({ name = "Targeting", size = 1, icon = ICO.aim, default = false })
+    sec2:toggle({ name = "Visible Only",              flag = "tb_visibleonly",                default = false })
+    sec2:toggle({ name = "Wall Check",                flag = "tb_wall_check",                 default = false })
+    sec2:toggle({ name = "Ignore Protected",          flag = "tb_ignore_protected",           default = false })
 end
 
 -----------------------------------------------------------------------
--- ESP
+-- ESP  (Player / Tracers / World / Chams)
 -----------------------------------------------------------------------
 local esp_player, esp_tracers, esp_world, esp_chams = window:tab({ name = "ESP", icon = ICO.esp, tabs = { "Player", "Tracers", "World", "Chams" } })
 
--- Player ESP
 do
     local col = esp_player:column({})
     local sec = col:section({ name = "Enemy ESP", size = 1, icon = ICO.esp, default = true })
@@ -3945,7 +3927,6 @@ do
     sec2:toggle({ name = "Show Team Colors",          flag = "esp_show_team",                 default = false })
 end
 
--- Tracers
 do
     local col = esp_tracers:column({})
     local sec = col:section({ name = "Tracers", size = 1, icon = ICO.esp, default = true })
@@ -3965,7 +3946,6 @@ do
     sec3:toggle({ name = "Customization",             flag = "target_tracer_customization",   default = false })
 end
 
--- World ESP
 do
     local col = esp_world:column({})
     local sec = col:section({ name = "World ESP", size = 1, icon = ICO.esp, default = true })
@@ -3985,10 +3965,9 @@ do
     sec2:slider({ name = "HUD Scale Multiplier",      flag = "HUD Scale Multiplier",          min = 0.5, max = 3, default = 1, interval = 0.1 })
 end
 
--- Chams
 do
     local col = esp_chams:column({})
-    local sec = col:section({ name = "Enemy Chams Suite", size = 1, icon = ICO.esp, default = true })
+    local sec = col:section({ name = "Enemy Chams", size = 1, icon = ICO.esp, default = true })
     sec:toggle({ name = "Enable Enemy Chams",         flag = "esp_chams",                     default = false })
     sec:dropdown({name = "Chams Kind",                flag = "Chams Kind",                    items = { "Flat", "Neon", "Glass", "Wireframe", "ForceField" }, default = "Flat" })
     sec:slider({ name = "Chams Fill",                 flag = "esp_chams_alpha_fill",          min = 0, max = 1, default = 0.5, interval = 0.01 })
@@ -4011,9 +3990,9 @@ do
 end
 
 -----------------------------------------------------------------------
--- MOVEMENT
+-- MOVEMENT  (Main / Teleport / Exploits / Melee / Hitbox)
 -----------------------------------------------------------------------
-local mv_main, mv_teleport = window:tab({ name = "Movement", icon = ICO.movement, tabs = { "Main", "Teleport" } })
+local mv_main, mv_tp, mv_ex, mv_melee, mv_hitbox = window:tab({ name = "Movement", icon = ICO.movement, tabs = { "Main", "Teleport", "Exploits", "Melee", "Hitbox" } })
 
 do
     local col = mv_main:column({})
@@ -4050,7 +4029,7 @@ do
 end
 
 do
-    local col = mv_teleport:column({})
+    local col = mv_tp:column({})
     local sec = col:section({ name = "Teleport V2", size = 1, icon = ICO.movement, default = true })
     sec:toggle({  name = "Enabled",                   flag = "tp_v2",                         default = false })
     sec:keybind({ name = "Teleport Key",              flag = "tp_v2_key",                     key = nil, mode = "Hold" })
@@ -4068,14 +4047,9 @@ do
     sec3:toggle({ name = "Melee Underground Strike",  flag = "Melee Underground Strike",      default = false })
 end
 
------------------------------------------------------------------------
--- EXPLOITS
------------------------------------------------------------------------
-local ex_main, ex_melee, ex_hitbox = window:tab({ name = "Exploits", icon = ICO.misc, tabs = { "Main", "Melee", "Hitbox" } })
-
 do
-    local col = ex_main:column({})
-    local sec = col:section({ name = "Exploits Suite", size = 1, icon = ICO.misc, default = true })
+    local col = mv_ex:column({})
+    local sec = col:section({ name = "Exploits", size = 1, icon = ICO.misc, default = true })
     sec:toggle({ name = "Full Auto",                  flag = "exploits_full_auto",            default = false })
     sec:slider({ name = "Fire Rate",                  flag = "exploits_firerate",             min = 1, max = 20, default = 5, interval = 1 })
     sec:toggle({ name = "No Spread",                  flag = "exploits_no_spread",            default = false })
@@ -4089,13 +4063,12 @@ do
 
     local sec2 = col:section({ name = "Game Utilities", size = 1, icon = ICO.misc, default = false })
     sec2:toggle({ name = "Arcade Auto Respawn",       flag = "arcade_auto_respawn",           default = false })
-    sec2:toggle({ name = "Auto Buy Ammunition",       flag = "arcade_auto_ammo",              default = false })
     sec2:toggle({ name = "Enable Auto Loadout",       flag = "Enable Auto Loadout",           default = false })
     sec2:dropdown({name = "Preferred Weapon",         flag = "preferred weapon",              items = { "None", "Assault Rifle", "Sniper", "Bow", "Crossbow", "Shotgun", "Minigun", "Burst Rifle", "Uzi", "Vandal" }, default = "None" })
 end
 
 do
-    local col = ex_melee:column({})
+    local col = mv_melee:column({})
     local sec = col:section({ name = "Melee", size = 1, icon = ICO.misc, default = true })
     sec:toggle({ name = "Avoid Katana Deflect",       flag = "Avoid Katana Deflect",          default = false })
     sec:slider({ name = "Melee Desync Reach",         flag = "Melee Desync Reach",            min = 1, max = 50, default = 5, interval = 0.5 })
@@ -4106,7 +4079,7 @@ do
 end
 
 do
-    local col = ex_hitbox:column({})
+    local col = mv_hitbox:column({})
     local sec = col:section({ name = "Hitbox", size = 1, icon = ICO.misc, default = true })
     sec:toggle({ name = "FireHitboxes",               flag = "FireHitboxes",                  default = false })
     sec:dropdown({name = "Hitbox Preset",             flag = "hitbox_preset",                 items = { "Head", "Torso", "UpperTorso", "LowerTorso", "Full Body", "Rapid Body" }, default = "Head" })
@@ -4115,9 +4088,9 @@ do
 end
 
 -----------------------------------------------------------------------
--- MISC
+-- MISC  (Main / Automate / Cosmetics / Server / Music)
 -----------------------------------------------------------------------
-local mc_main, mc_automate, mc_cosmetics, mc_server = window:tab({ name = "Misc", icon = ICO.misc, tabs = { "Main", "Automate", "Cosmetics", "Server" } })
+local mc_main, mc_automate, mc_cosmetics, mc_server, mc_music = window:tab({ name = "Misc", icon = ICO.misc, tabs = { "Main", "Automate", "Cosmetics", "Server", "Music" } })
 
 do
     local col = mc_main:column({})
@@ -4223,12 +4196,29 @@ do
     sec:dropdown({name = "Action",                    flag = "Staff Alert",                   items = { "Notify", "Disconnect", "Noclip" }, default = "Notify" })
 end
 
+do
+    local col = mc_music:column({})
+    local sec = col:section({ name = "Music Player", size = 1, icon = ICO.misc, default = true })
+    sec:toggle({  name = "Show Music Player",         flag = "Show Music Player",             default = false })
+    sec:toggle({  name = "Load Community Songs",      flag = "Load Community Songs",          default = false })
+    sec:toggle({  name = "Custom Audio Stream",       flag = "Custom Audio Stream",           default = false })
+    sec:slider({  name = "Sound Volume",              flag = "music_volume",                  min = 0, max = 1, default = 0.5, interval = 0.05 })
+    sec:toggle({  name = "Bass Boost",                flag = "bass boost",                    default = false })
+    sec:dropdown({name = "Preset Track",             flag = "music_preset",                  items = {
+        "None", "DVRST", "KSLV", "KSLV Noh", "Molchat Doma", "Crystal Castles",
+        "M83", "INTERWORLD", "Snow Strippers", "Ari Abdul", "Teriyaki Boyz",
+        "Basshunter", "Mareux", "Djo", "MoonDeity", "FrankJavCee",
+        "Hensonn", "Jett", "King Nasir", "MC Orsen", "Keynais",
+    }, default = "None" })
+    sec:toggle({  name = "Shuffle",                   flag = "music_shuffle",                 default = false })
+    sec:dropdown({name = "Repeat Mode",               flag = "music_repeat",                  items = { "None", "Repeat All", "Sped Up", "Slowed" }, default = "None" })
+end
+
 -----------------------------------------------------------------------
--- VISUALS
+-- VISUALS  (Crosshair / HUD / Lighting / World)
 -----------------------------------------------------------------------
 local vis_crosshair, vis_hud, vis_lighting, vis_world = window:tab({ name = "Visuals", icon = ICO.visuals, tabs = { "Crosshair", "HUD", "Lighting", "World" } })
 
--- Crosshair
 do
     local col = vis_crosshair:column({})
     local sec = col:section({ name = "Custom Crosshair", size = 1, icon = ICO.visuals, default = true })
@@ -4251,7 +4241,6 @@ do
     sec2:toggle({ name = "Filled FOV Circle",         flag = "crosshair_fov_filled",          default = false })
 end
 
--- HUD
 do
     local col = vis_hud:column({})
     local sec = col:section({ name = "HUD", size = 1, icon = ICO.visuals, default = true })
@@ -4281,7 +4270,6 @@ do
     sec3:slider({ name = "Sound Volume",              flag = "Sound Volume",                  min = 0, max = 1, default = 0.5, interval = 0.05 })
 end
 
--- Lighting
 do
     local col = vis_lighting:column({})
     local sec = col:section({ name = "Lighting", size = 1, icon = ICO.visuals, default = true })
@@ -4296,13 +4284,12 @@ do
     sec:slider({ name = "Time of Day",                flag = "lighting_number_ClockTime",     min = 0, max = 24, default = 14, interval = 0.1, callback = function(v)
         if library.flags.lighting_toggle_ClockTime then Lighting.ClockTime = v end
     end })
-    sec:toggle({ name = "Ambient Override",           flag = "lighting_toggle_Ambient",       default = false })
     sec:toggle({ name = "Global Shadows",             flag = "lighting_bool_GlobalShadows",   default = true })
     sec:slider({ name = "Shadow Softness",            flag = "Shadow Softness",               min = 0, max = 1, default = 0.2, interval = 0.01, callback = function(v)
         Lighting.ShadowSoftness = v
     end })
 
-    local sec2 = col:section({ name = "Custom Fog Modulation", size = 1, icon = ICO.visuals, default = false })
+    local sec2 = col:section({ name = "Fog", size = 1, icon = ICO.visuals, default = false })
     sec2:toggle({ name = "Enabled",                   flag = "lighting_toggle_FogEnd",        default = false })
     sec2:slider({ name = "Fog End Distance",          flag = "lighting_number_FogEnd",        min = 0, max = 100000, default = 100000, interval = 100, callback = function(v)
         if library.flags.lighting_toggle_FogEnd then Lighting.FogEnd = v end
@@ -4311,15 +4298,14 @@ do
         if library.flags.lighting_toggle_FogEnd then Lighting.FogStart = v end
     end })
 
-    local sec3 = col:section({ name = "Color Correction Effect", size = 1, icon = ICO.visuals, default = false })
+    local sec3 = col:section({ name = "Color Correction", size = 1, icon = ICO.visuals, default = false })
     sec3:toggle({ name = "Enabled",                   flag = "color_correction_enabled",      default = false })
-    sec3:slider({ name = "Color Contrast",            flag = "color_correction_contrast",     min = -1, max = 1, default = 0, interval = 0.01 })
-    sec3:slider({ name = "Color Saturation",          flag = "color_correction_saturation",   min = -1, max = 1, default = 0, interval = 0.01 })
+    sec3:slider({ name = "Contrast",                  flag = "color_correction_contrast",     min = -1, max = 1, default = 0, interval = 0.01 })
+    sec3:slider({ name = "Saturation",                flag = "color_correction_saturation",   min = -1, max = 1, default = 0, interval = 0.01 })
     sec3:slider({ name = "Brightness",                flag = "color_correction_brightness",   min = -1, max = 1, default = 0, interval = 0.01 })
-    sec3:slider({ name = "Exposure Value",            flag = "lighting_number_ExposureCompensation", min = -3, max = 3, default = 0, interval = 0.1, callback = function(v)
+    sec3:slider({ name = "Exposure",                  flag = "lighting_number_ExposureCompensation", min = -3, max = 3, default = 0, interval = 0.1, callback = function(v)
         if library.flags.color_correction_enabled then Lighting.ExposureCompensation = v end
     end })
-    sec3:toggle({ name = "Exposure Compensation",     flag = "lighting_toggle_ExposureCompensation", default = false })
 
     local sec4 = col:section({ name = "Bloom", size = 1, icon = ICO.visuals, default = false })
     sec4:toggle({ name = "Enabled",                   flag = "bloom_enabled",                 default = false })
@@ -4327,7 +4313,7 @@ do
     sec4:slider({ name = "Size",                      flag = "bloom_size",                    min = 0, max = 56, default = 24, interval = 1 })
     sec4:slider({ name = "Threshold",                 flag = "bloom_threshold",               min = 0, max = 2, default = 1, interval = 0.01 })
 
-    local sec5 = col:section({ name = "Atmosphere Changer", size = 1, icon = ICO.visuals, default = false })
+    local sec5 = col:section({ name = "Atmosphere", size = 1, icon = ICO.visuals, default = false })
     sec5:toggle({ name = "Enabled",                   flag = "atmosphere_enabled",            default = false })
     sec5:slider({ name = "Density",                   flag = "atmosphere_density",            min = 0, max = 1, default = 0.3, interval = 0.01 })
     sec5:slider({ name = "Offset",                    flag = "atmosphere_offset",             min = 0, max = 1, default = 0, interval = 0.01 })
@@ -4336,7 +4322,6 @@ do
     sec5:slider({ name = "Decay",                     flag = "atmosphere_decay",              min = 0, max = 1, default = 0, interval = 0.01 })
 end
 
--- World
 do
     local col = vis_world:column({})
     local sec = col:section({ name = "Sunrays", size = 1, icon = ICO.visuals, default = false })
@@ -4353,29 +4338,6 @@ do
     sec3:dropdown({name = "Type",                     flag = "weather_value",                 items = { "Rain", "Snow", "Lightning", "Blizzard", "Storm", "Stars", "Moon", "Solar System", "Sparkle" }, default = "Rain" })
     sec3:slider({ name = "Rate Multiplier",           flag = "weather_rate_multiplier",       min = 0.1, max = 5, default = 1, interval = 0.1 })
     sec3:slider({ name = "Lifetime Multiplier",       flag = "weather_lifetime_multiplier",   min = 0.1, max = 5, default = 1, interval = 0.1 })
-end
-
------------------------------------------------------------------------
--- MUSIC
------------------------------------------------------------------------
-local mus_main = window:tab({ name = "Music", icon = ICO.misc, tabs = { "Main" } })
-
-do
-    local col = mus_main:column({})
-    local sec = col:section({ name = "Music Player", size = 1, icon = ICO.misc, default = true })
-    sec:toggle({  name = "Show Music Player",         flag = "Show Music Player",             default = false })
-    sec:toggle({  name = "Load Community Songs",      flag = "Load Community Songs",          default = false })
-    sec:toggle({  name = "Custom Audio Stream",       flag = "Custom Audio Stream",           default = false })
-    sec:slider({  name = "Sound Volume",              flag = "music_volume",                  min = 0, max = 1, default = 0.5, interval = 0.05 })
-    sec:toggle({  name = "Bass Boost",                flag = "bass boost",                    default = false })
-    sec:dropdown({name = "Preset Track",             flag = "music_preset",                  items = {
-        "None", "DVRST", "KSLV", "KSLV Noh", "Molchat Doma", "Crystal Castles",
-        "M83", "INTERWORLD", "Snow Strippers", "Ari Abdul", "Teriyaki Boyz",
-        "Basshunter", "Mareux", "Djo", "MoonDeity", "FrankJavCee",
-        "Hensonn", "Jett", "King Nasir", "MC Orsen", "Keynais",
-    }, default = "None" })
-    sec:toggle({  name = "Shuffle",                   flag = "music_shuffle",                 default = false })
-    sec:dropdown({name = "Repeat Mode",               flag = "music_repeat",                  items = { "None", "Repeat All", "Sped Up", "Slowed" }, default = "None" })
 end
 
 -----------------------------------------------------------------------
@@ -4575,10 +4537,8 @@ local function updateEsp()
         local botPos = root.Position - Vector3.new(0, 3.2, 0)
         local topSc, topV = Camera:WorldToViewportPoint(topPos)
         local botSc, botV = Camera:WorldToViewportPoint(botPos)
-
         local onScreen = topV and botV
 
-        -- off-screen arrow
         if flags.esp_arrow and t.arrow then
             if not onScreen then
                 local vp = Camera.ViewportSize
@@ -4606,25 +4566,21 @@ local function updateEsp()
         local width  = height * 0.6
         local x, y  = topSc.X - width / 2, topSc.Y
 
-        -- box
         local boxOn = (showEnemy and flags.esp_box) or (isTeam and flags["Teammate Box"])
         if boxOn and t.box then
             t.box.Filled = flags.esp_fill or false; t.box.Size = Vector2.new(width, height)
             t.box.Position = Vector2.new(x, y); t.box.Visible = true
         elseif t.box then t.box.Visible = false end
 
-        -- name
         local nameOn = (showEnemy and flags.esp_name) or (isTeam and flags["Teammate Name"])
         if nameOn and t.name then
             t.name.Position = Vector2.new(topSc.X, y - 15); t.name.Visible = true
         elseif t.name then t.name.Visible = false end
 
-        -- distance
         if flags.esp_distance and t.dist then
             t.dist.Text = dist3d.."m"; t.dist.Position = Vector2.new(topSc.X, y + height + 2); t.dist.Visible = true
         elseif t.dist then t.dist.Visible = false end
 
-        -- health bar
         local hpOn = (showEnemy and flags.esp_healthbar) or (isTeam and flags["Teammate Health Bar"])
         if hpOn and t.hpbg and t.hp then
             local ratio = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
@@ -4633,13 +4589,11 @@ local function updateEsp()
             t.hp.Color = Color3.fromRGB(255*(1-ratio), 255*ratio, 0); t.hp.Visible = true
         elseif t.hpbg then t.hpbg.Visible = false; if t.hp then t.hp.Visible = false end end
 
-        -- hp number
         if flags.esp_hp_num and t.hpnum then
             t.hpnum.Text = math.floor(hum.Health)
             t.hpnum.Position = Vector2.new(x - 14, y + height/2 - 5); t.hpnum.Visible = true
         elseif t.hpnum then t.hpnum.Visible = false end
 
-        -- skeleton
         if flags.esp_skeleton and t.skel then
             for i, pair in SKEL do
                 local a = char:FindFirstChild(pair[1]); local b = char:FindFirstChild(pair[2])
@@ -4654,7 +4608,6 @@ local function updateEsp()
             end
         elseif t.skel then for _, l in t.skel do pcall(function() l.Visible = false end) end end
 
-        -- head marker
         if flags["Head Marker"] and t.headcirc then
             local head = char:FindFirstChild("Head")
             if head then
@@ -4666,7 +4619,6 @@ local function updateEsp()
             end
         elseif t.headcirc then t.headcirc.Visible = false end
 
-        -- tracer
         if flags["Enable Tracer"] and t.tracer then
             local vp = Camera.ViewportSize
             local orig = flags.esp_tracer_origin or "Bottom"
@@ -4853,7 +4805,6 @@ RunService.RenderStepped:Connect(function(dt)
     local partName = flags.targeting_part or "Head"
     local prioMode = flags.ragebot_priority_targets or "Closest to Crosshair"
 
-    -- ragebot
     if flags.ragebot_enabled then
         local target = getTarget(360, prioMode, visOnly, limDist, maxDist)
         if target then
@@ -4871,7 +4822,6 @@ RunService.RenderStepped:Connect(function(dt)
         end
     end
 
-    -- silent aim
     if flags.silent_toggle then
         local target = getTarget(flags.silent_radius or 180, prioMode, visOnly, limDist, maxDist)
         if target then
@@ -4882,7 +4832,6 @@ RunService.RenderStepped:Connect(function(dt)
         end
     end
 
-    -- aimbot
     if flags.aimbot_toggle then
         local target = getTarget(flags.aimbot_radius or 90, "Closest to Crosshair", visOnly, limDist, maxDist)
         if target then
@@ -4894,7 +4843,6 @@ RunService.RenderStepped:Connect(function(dt)
         end
     end
 
-    -- triggerbot
     if flags.triggerbot_enabled then
         local target = getTarget(50, "Closest to Crosshair", flags.tb_visibleonly, limDist, flags.triggerbot_max_distance or 100)
         if target then
@@ -4914,16 +4862,13 @@ RunService.RenderStepped:Connect(function(dt)
         end
     end
 
-    -- third person
     if flags.third_person_enabled then
         local root = getChar(LP) and getChar(LP):FindFirstChild("HumanoidRootPart")
         if root then Camera.CFrame = CFrame.new(root.Position + Vector3.new(0,3,-15), root.Position) end
     end
 
-    -- fov changer
     if flags.camera_fov_changer then Camera.FieldOfView = flags.camera_fov_changer_amount or 70 end
 
-    -- hitmarker update
     if hmTimer > 0 then
         hmTimer = hmTimer - dt
         local vp = Camera.ViewportSize; local cx, cy = vp.X/2, vp.Y/2; local hs = 8
@@ -4935,7 +4880,6 @@ RunService.RenderStepped:Connect(function(dt)
         for _, l in hmLines do l.Visible = false end
     end
 
-    -- watermark
     if flags.hud_watermark then
         wmDraw.Position = Vector2.new(Camera.ViewportSize.X - 155, 8); wmDraw.Visible = true
     else wmDraw.Visible = false end
