@@ -15382,6 +15382,36 @@ task.spawn(initMusicPlayer)
 -- task.spawn(initKeybindsWidget)
 task.spawn(initCosmeticChangerPill)
 
+task.spawn(function()
+    local pg = LocalPlayer:WaitForChild("PlayerGui", 15)
+    if not pg then return end
+    local function hidecrackedBy()
+        pcall(function()
+            for _, gui in ipairs(pg:GetChildren()) do
+                if gui:IsA("ScreenGui") or gui:IsA("BillboardGui") then
+                    for _, v in ipairs(gui:GetDescendants()) do
+                        if (v:IsA("TextLabel") or v:IsA("TextButton") or v:IsA("Frame")) then
+                            local ok, txt = pcall(function() return v.Text end)
+                            if ok and txt then
+                                local low = txt:lower()
+                                if low:find("cracked by") or low:find("join discord") then
+                                    pcall(function() gui.Enabled = false end)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+    task.wait(1)
+    hidecrackedBy()
+    pg.ChildAdded:Connect(function()
+        task.wait(0.5)
+        hidecrackedBy()
+    end)
+end)
+
 -- Auto-load user's custom config on startup (Synchronous)
 pcall(function()
     local cfgPath = "Sleepy.gg/configs/UserActiveConfig.json"
@@ -15409,6 +15439,22 @@ pcall(function()
         staffDetectorState.Enabled = false
         staffDetectorState.AutoHop = false
         staffDetectorState.AutoKick = false
+        -- force all combat features off regardless of saved config
+        flags.ragebot_enabled        = false
+        flags.ragebot_void_spam      = false
+        flags.voidspam_enabled       = false
+        flags.voidspam               = false
+        flags.ragebot                = false
+        flags.antiaim_enabled        = false
+        flags.antiaim_hidehead       = false
+        flags.antiaim_client_wont_see = false
+        flags.manipulation_enabled   = false
+        flags.wallbang_solver_v2     = false
+        flags.teleport_v2_origin     = false
+        flags.silent_aim_enabled     = false
+        flags.triggerbot_enabled     = false
+        flags.fake_position_enabled  = false
+        if typeof(setFakePosition) == "function" then pcall(setFakePosition, false) end
         if flags.FakePosition and typeof(setFakePosition) == "function" then
             pcall(setFakePosition, flags.FakePosition)
         end
