@@ -35,6 +35,7 @@ local window = library:window({
     size      = UDim2.new(0, 750, 0, 580),
 })
 
+
 -----------------------------------------------------------------------
 -- AIM  (Ragebot / Silent Aim / Aimbot / Triggerbot)
 -----------------------------------------------------------------------
@@ -42,6 +43,7 @@ local rb_p, sa_p, ab_p, trig_p = window:tab({ name = "Aim", icon = ICO.aim, tabs
 
 -- RAGEBOT
 do
+    -- left column: main controls
     local col = rb_p:column({})
     local sec = col:section({ name = "Ragebot", size = 1, icon = ICO.aim, default = true })
     sec:toggle({  name = "Enabled",                   flag = "ragebot_enabled",               default = false })
@@ -59,13 +61,15 @@ do
     sec:toggle({  name = "Add to Ragebot Priority",   flag = "ragebot_add_priority",          default = false })
     sec:toggle({  name = "Auto Handoff On Shoot",     flag = "Auto Handoff On Shoot",         default = false })
 
-    local sec2 = col:section({ name = "Desync", size = 1, icon = ICO.aim, default = false })
+    -- right column: desync + targeting + notify
+    local col2 = rb_p:column({})
+    local sec2 = col2:section({ name = "Desync", size = 1, icon = ICO.aim, default = true })
     sec2:dropdown({name = "Desync Mode",              flag = "Desync Mode",                   items = { "Disabled", "Lite Desync", "Voidspam Desync", "AA_Modified" }, default = "Disabled" })
     sec2:toggle({  name = "Fake Position Engine",     flag = "Fake Position Engine",          default = false })
     sec2:slider({  name = "Camera Elevation",         flag = "FakePosCameraElevation",        min = -20, max = 20, default = 0, interval = 0.5 })
     sec2:dropdown({name = "Hitbox Orientation",       flag = "Hitbox Orientation Desync",     items = { "None", "Jitter", "Spin", "Backwards" }, default = "None" })
 
-    local sec3 = col:section({ name = "Targeting", size = 1, icon = ICO.aim, default = false })
+    local sec3 = col2:section({ name = "Targeting", size = 1, icon = ICO.aim, default = true })
     sec3:dropdown({name = "Priority Targets",         flag = "ragebot_priority_targets",      items = { "Closest to Crosshair", "Lowest HP", "Smart Lowest HP", "Nearest" }, default = "Closest to Crosshair" })
     sec3:toggle({  name = "Visible Only",             flag = "targeting_visibleonly",         default = false })
     sec3:toggle({  name = "Limit Distance",           flag = "targeting_limitdistance",       default = false })
@@ -79,13 +83,13 @@ do
     sec3:dropdown({name = "Part Blacklist",           flag = "targeting_closest_part_blacklist", items = { "None", "Arms", "Legs" }, default = "None" })
     sec3:toggle({  name = "Wall Check",               flag = "Wall Check",                    default = false })
 
-    local sec4 = col:section({ name = "Target Highlight", size = 1, icon = ICO.aim, default = false })
+    local sec4 = col2:section({ name = "Target Highlight", size = 1, icon = ICO.aim, default = false })
     sec4:toggle({ name = "Enabled",                   flag = "target_highlight",              default = false })
     sec4:toggle({ name = "Fill",                      flag = "target_highlight_fill",         default = false })
     sec4:toggle({ name = "Outline",                   flag = "target_highlight_outline",      default = true })
     sec4:dropdown({name = "Type",                     flag = "target_highlight_type",         items = { "Box", "Circle", "Highlight" }, default = "Box" })
 
-    local sec5 = col:section({ name = "Hit Notify", size = 1, icon = ICO.aim, default = false })
+    local sec5 = col2:section({ name = "Hit Notify", size = 1, icon = ICO.aim, default = false })
     sec5:toggle({ name = "Enabled",                   flag = "target_hit_notify",             default = false })
     sec5:slider({ name = "Duration",                  flag = "target_hit_notify_duration",    min = 0.5, max = 5, default = 1, interval = 0.5, suffix = "s" })
     sec5:dropdown({name = "Text",                     flag = "target_hit_notify_text",        items = { "Hit!", "damage ratio", "fortnite damage" }, default = "Hit!" })
@@ -162,7 +166,8 @@ end
 local esp_player, esp_tracers, esp_world, esp_chams = window:tab({ name = "ESP", icon = ICO.esp, tabs = { "Player", "Tracers", "World", "Chams" } })
 
 do
-    local col = esp_player:column({})
+    local col  = esp_player:column({})
+    local col2 = esp_player:column({})
     local sec = col:section({ name = "Enemy ESP", size = 1, icon = ICO.esp, default = true })
     sec:toggle({ name = "Enable Enemy ESP",           flag = "esp_on",                        default = false })
     sec:toggle({ name = "Bounding Box",               flag = "esp_box",                       default = false })
@@ -189,7 +194,7 @@ do
     sec:dropdown({name = "ESP Font",                  flag = "ESP Font",                      items = { "Default", "Monospace", "Gotham", "Tahoma", "Arial" }, default = "Default" })
     sec:slider({ name = "ESP Font Size",              flag = "ESP Font Size",                 min = 8, max = 24, default = 13, interval = 1 })
 
-    local sec2 = col:section({ name = "Teammates ESP", size = 1, icon = ICO.esp, default = false })
+    local sec2 = col2:section({ name = "Teammates ESP", size = 1, icon = ICO.esp, default = true })
     sec2:toggle({ name = "Enable Teammates ESP",      flag = "Enable Teammates ESP",          default = false })
     sec2:toggle({ name = "Teammate Box",              flag = "Teammate Box",                  default = false })
     sec2:toggle({ name = "Teammate Health Bar",       flag = "Teammate Health Bar",           default = false })
@@ -265,7 +270,8 @@ end
 local mv_main, mv_tp, mv_ex, mv_melee, mv_hitbox = window:tab({ name = "Movement", icon = ICO.movement, tabs = { "Main", "Teleport", "Exploits", "Melee", "Hitbox" } })
 
 do
-    local col = mv_main:column({})
+    local col  = mv_main:column({})
+    local col2 = mv_main:column({})
     local sec = col:section({ name = "Movement", size = 1, icon = ICO.movement, default = true })
     sec:toggle({  name = "Fly",                       flag = "movement_fly",                  default = false })
     sec:keybind({ name = "Fly Keybind",               flag = "movement_flykeybind",           key = nil, mode = "Toggle" })
@@ -292,13 +298,13 @@ do
     sec:toggle({  name = "Camera Replication Decouple", flag = "Camera Replication Decouple", default = false })
     sec:slider({  name = "Surface Camera Elevation",  flag = "Surface Camera Elevation",      min = -20, max = 20, default = 0, interval = 0.5 })
 
-    local sec_fl = col:section({ name = "Fake Lag", size = 1, icon = ICO.movement, default = false })
+    local sec_fl = col2:section({ name = "Fake Lag", size = 1, icon = ICO.movement, default = true })
     sec_fl:toggle({  name = "Enabled",                 flag = "fake_lag_enabled",              default = false })
     sec_fl:slider({  name = "Amount",                  flag = "fake_lag_amount",               min = 1, max = 20, default = 5, interval = 1 })
     sec_fl:dropdown({name = "Mode",                    flag = "fake_lag_mode",                 items = { "Static", "Fluctuate", "Adaptive" }, default = "Static" })
     sec_fl:keybind({ name = "Keybind",                 flag = "fake_lag_keybind",              key = nil, mode = "Toggle" })
 
-    local sec2 = col:section({ name = "Anti-Aim", size = 1, icon = ICO.movement, default = false })
+    local sec2 = col2:section({ name = "Anti-Aim", size = 1, icon = ICO.movement, default = true })
     sec2:toggle({  name = "Enabled",                  flag = "anti_aim_enabled",              default = false })
     sec2:dropdown({name = "Pitch",                    flag = "anti_aim_pitch",                items = { "None", "Down", "Up", "Zero Pitch" }, default = "None" })
     sec2:dropdown({name = "Yaw",                      flag = "anti_aim_yaw",                  items = { "None", "Spin", "Jitter", "Jitter Fast", "Jitter Slow", "Backwards", "Side", "Sway HvH" }, default = "None" })
