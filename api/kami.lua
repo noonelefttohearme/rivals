@@ -3764,16 +3764,14 @@ local window = library:window({
 })
 
 -----------------------------------------------------------------------
--- AIM BOT  (Ragebot · Silent Aim · Aimbot · Triggerbot · Settings)
+-- RAGEBOT
 -----------------------------------------------------------------------
-local aim_rage, aim_silent, aim_legit, aim_trigger, aim_settings = window:tab({
-    name = "Aim Bot", icon = ICO.aim,
-    tabs = { "Ragebot", "Silent Aim", "Aimbot", "Triggerbot", "Settings" },
+local rb_main, rb_settings = window:tab({
+    name = "Ragebot", icon = ICO.aim, tabs = { "Main", "Settings" },
 })
 
--- Ragebot
 do
-    local col = aim_rage:column({})
+    local col = rb_main:column({})
     local sec = col:section({ name = "Ragebot", size = 1, icon = ICO.aim, default = true })
     sec:toggle({  name = "Enabled",                   flag = "ragebot_enabled",              default = false })
     sec:keybind({ name = "Keybind",                   flag = "ragebot_keybind",              key = nil, mode = "Toggle" })
@@ -3785,71 +3783,12 @@ do
     sec:slider({  name = "Void Spam Attack",          flag = "ragebot_void_spam_attack",     min = 0, max = 1, default = 0.1, interval = 0.01 })
     sec:slider({  name = "Void Spam Hide",            flag = "ragebot_void_spam_hide",       min = 0, max = 1, default = 0.2, interval = 0.01 })
     sec:toggle({  name = "Bait",                      flag = "ragebot_bait",                 default = false })
-
-    local sec2 = col:section({ name = "Priority Targets", size = 1, icon = ICO.aim, default = false })
-    sec2:dropdown({name = "Priority Targets",         flag = "ragebot_priority_targets",     items = { "Closest to Crosshair", "Lowest HP", "Nearest" }, default = "Closest to Crosshair" })
 end
 
--- Silent Aim
 do
-    local col = aim_silent:column({})
-    local sec = col:section({ name = "Silent Aim", size = 1, icon = ICO.aim, default = true })
-    sec:toggle({  name = "Enabled",                   flag = "silent_toggle",                default = false })
-    sec:keybind({ name = "Keybind",                   flag = "silent_keybind",               key = nil, mode = "Toggle" })
-    sec:slider({  name = "Hitchance (%)",             flag = "silent_hitchance",             min = 1, max = 100, default = 100, interval = 1, suffix = "%" })
-    sec:toggle({  name = "Manipulation",              flag = "silent_manipulation",          default = false })
-    sec:toggle({  name = "Visualize FOV",             flag = "silent_visualize",             default = false })
-    sec:toggle({  name = "Show FOV",                  flag = "silent_showfov",               default = false })
-    sec:slider({  name = "FOV",                       flag = "silent_radius",                min = 0, max = 360, default = 180, interval = 1, suffix = "°" })
-    sec:dropdown({name = "Closest Part",              flag = "silent_closest_part",          items = { "Head", "Torso", "Nearest" }, default = "Head" })
-    sec:toggle({  name = "FOV Fill",                  flag = "silent_fov_fill",              default = false })
-    sec:toggle({  name = "FOV Moving",                flag = "silent_fov_moving",            default = false })
-    sec:toggle({  name = "FOV Outline",               flag = "silent_fov_outline",           default = true  })
-    sec:toggle({  name = "FOV Lerp",                  flag = "silent_fov_lerp",              default = true  })
-    sec:slider({  name = "FOV Rotation Speed",        flag = "silent_fov_rotation_speed",    min = 0, max = 10, default = 0, interval = 0.1 })
-end
-
--- Aimbot (smooth/legit)
-do
-    local col = aim_legit:column({})
-    local sec = col:section({ name = "Aimbot", size = 1, icon = ICO.aim, default = true })
-    sec:toggle({  name = "Enabled",                   flag = "aimbot_toggle",                default = false })
-    sec:keybind({ name = "Keybind",                   flag = "aimbot_keybind",               key = nil, mode = "Hold" })
-    sec:slider({  name = "FOV",                       flag = "aimbot_radius",                min = 0, max = 360, default = 90, interval = 1, suffix = "°" })
-    sec:slider({  name = "Smoothing X",               flag = "aimbot_delay_smooth_x",        min = 0, max = 1, default = 0.1, interval = 0.01 })
-    sec:slider({  name = "Smoothing Y",               flag = "aimbot_delay_smooth_y",        min = 0, max = 1, default = 0.1, interval = 0.01 })
-    sec:toggle({  name = "Smoothing",                 flag = "aimbot_smoothing",             default = true  })
-    sec:toggle({  name = "Show FOV",                  flag = "aimbot_showfov",               default = false })
-    sec:toggle({  name = "Match Axis",                flag = "aimbot_match_axis",            default = false })
-    sec:dropdown({name = "Closest Part",              flag = "aimbot_closest_part",          items = { "Head", "Torso", "Nearest" }, default = "Head" })
-    sec:toggle({  name = "Delay Position",            flag = "aimbot_delay_position",        default = false })
-    sec:toggle({  name = "Delay Smooth Jump",         flag = "aimbot_delay_smooth_jump",     default = false })
-    sec:toggle({  name = "FOV Fill",                  flag = "aimbot_fov_fill",              default = false })
-    sec:toggle({  name = "FOV Moving",                flag = "aimbot_fov_moving",            default = false })
-    sec:toggle({  name = "FOV Outline",               flag = "aimbot_fov_outline",           default = true  })
-    sec:toggle({  name = "FOV Lerp",                  flag = "aimbot_fov_lerp",              default = true  })
-    sec:slider({  name = "FOV Rotation Speed",        flag = "aimbot_fov_rotation_speed",    min = 0, max = 10, default = 0, interval = 0.1 })
-end
-
--- Triggerbot
-do
-    local col = aim_trigger:column({})
-    local sec = col:section({ name = "Triggerbot", size = 1, icon = ICO.aim, default = true })
-    sec:toggle({  name = "Enabled",                   flag = "triggerbot_enabled",           default = false })
-    sec:keybind({ name = "Keybind",                   flag = "triggerbot_keybind",           key = nil, mode = "Toggle" })
-    sec:slider({  name = "Forget Time",               flag = "triggerbot_forget_time",       min = 0, max = 3, default = 0.5, interval = 0.01, suffix = "s" })
-    sec:slider({  name = "Max Distance",              flag = "triggerbot_max_distance",      min = 0, max = 500, default = 100, interval = 1 })
-    sec:slider({  name = "Reaction Time",             flag = "triggerbot_reaction_time",     min = 0, max = 500, default = 100, interval = 1, suffix = "ms" })
-    sec:slider({  name = "Reaction Time Offset",      flag = "triggerbot_reaction_time_offset", min = 0, max = 200, default = 0, interval = 1, suffix = "ms" })
-    sec:slider({  name = "Shoot Delay",               flag = "triggerbot_shoot_delay",       min = 0, max = 500, default = 0, interval = 1, suffix = "ms" })
-    sec:toggle({  name = "Scoped Only",               flag = "triggerbot_scoped",            default = false })
-    sec:dropdown({name = "Part Blacklist",            flag = "triggerbot_part_blacklist",    items = { "None", "Legs", "Arms" }, default = "None" })
-end
-
--- Aim Settings (shared targeting)
-do
-    local col = aim_settings:column({})
+    local col = rb_settings:column({})
     local sec = col:section({ name = "Targeting", size = 1, icon = ICO.aim, default = true })
+    sec:dropdown({name = "Priority Targets",          flag = "ragebot_priority_targets",     items = { "Closest to Crosshair", "Lowest HP", "Nearest" }, default = "Closest to Crosshair" })
     sec:toggle({  name = "Visible Only",              flag = "targeting_visibleonly",        default = false })
     sec:toggle({  name = "Limit Distance",            flag = "targeting_limitdistance",      default = false })
     sec:slider({  name = "Max Distance",              flag = "targeting_maxdistance",        min = 0, max = 1000, default = 500, interval = 1 })
@@ -3870,6 +3809,87 @@ do
     sec3:toggle({ name = "Enabled",                   flag = "target_hit_notify",            default = false })
     sec3:slider({ name = "Duration",                  flag = "target_hit_notify_duration",   min = 0.5, max = 5, default = 1, interval = 0.5, suffix = "s" })
     sec3:dropdown({name = "Text",                     flag = "target_hit_notify_text",       items = { "Hit!", "damage ratio", "fortnite damage" }, default = "Hit!" })
+end
+
+-----------------------------------------------------------------------
+-- SILENT AIM
+-----------------------------------------------------------------------
+local sa_main = window:tab({
+    name = "Silent Aim", icon = ICO.aim, tabs = { "Main" },
+})
+
+do
+    local col = sa_main:column({})
+    local sec = col:section({ name = "Silent Aim", size = 1, icon = ICO.aim, default = true })
+    sec:toggle({  name = "Enabled",                   flag = "silent_toggle",                default = false })
+    sec:keybind({ name = "Keybind",                   flag = "silent_keybind",               key = nil, mode = "Toggle" })
+    sec:slider({  name = "Hitchance",                 flag = "silent_hitchance",             min = 1, max = 100, default = 100, interval = 1, suffix = "%" })
+    sec:toggle({  name = "Manipulation",              flag = "silent_manipulation",          default = false })
+    sec:toggle({  name = "Visualize FOV",             flag = "silent_visualize",             default = false })
+    sec:toggle({  name = "Show FOV",                  flag = "silent_showfov",               default = false })
+    sec:slider({  name = "FOV",                       flag = "silent_radius",                min = 0, max = 360, default = 180, interval = 1, suffix = "°" })
+    sec:dropdown({name = "Closest Part",              flag = "silent_closest_part",          items = { "Head", "Torso", "Nearest" }, default = "Head" })
+    sec:toggle({  name = "FOV Fill",                  flag = "silent_fov_fill",              default = false })
+    sec:toggle({  name = "FOV Moving",                flag = "silent_fov_moving",            default = false })
+    sec:toggle({  name = "FOV Outline",               flag = "silent_fov_outline",           default = true  })
+    sec:toggle({  name = "FOV Lerp",                  flag = "silent_fov_lerp",              default = true  })
+    sec:slider({  name = "FOV Rotation Speed",        flag = "silent_fov_rotation_speed",    min = 0, max = 10, default = 0, interval = 0.1 })
+end
+
+-----------------------------------------------------------------------
+-- AIMBOT
+-----------------------------------------------------------------------
+local ab_main = window:tab({
+    name = "Aimbot", icon = ICO.aim, tabs = { "Main" },
+})
+
+do
+    local col = ab_main:column({})
+    local sec = col:section({ name = "Aimbot", size = 1, icon = ICO.aim, default = true })
+    sec:toggle({  name = "Enabled",                   flag = "aimbot_toggle",                default = false })
+    sec:keybind({ name = "Keybind",                   flag = "aimbot_keybind",               key = nil, mode = "Hold" })
+    sec:slider({  name = "FOV",                       flag = "aimbot_radius",                min = 0, max = 360, default = 90, interval = 1, suffix = "°" })
+    sec:slider({  name = "Smoothing X",               flag = "aimbot_delay_smooth_x",        min = 0, max = 1, default = 0.1, interval = 0.01 })
+    sec:slider({  name = "Smoothing Y",               flag = "aimbot_delay_smooth_y",        min = 0, max = 1, default = 0.1, interval = 0.01 })
+    sec:toggle({  name = "Smoothing",                 flag = "aimbot_smoothing",             default = true  })
+    sec:toggle({  name = "Show FOV",                  flag = "aimbot_showfov",               default = false })
+    sec:toggle({  name = "Match Axis",                flag = "aimbot_match_axis",            default = false })
+    sec:dropdown({name = "Closest Part",              flag = "aimbot_closest_part",          items = { "Head", "Torso", "Nearest" }, default = "Head" })
+    sec:toggle({  name = "Delay Position",            flag = "aimbot_delay_position",        default = false })
+    sec:toggle({  name = "Delay Smooth Jump",         flag = "aimbot_delay_smooth_jump",     default = false })
+    sec:toggle({  name = "FOV Fill",                  flag = "aimbot_fov_fill",              default = false })
+    sec:toggle({  name = "FOV Moving",                flag = "aimbot_fov_moving",            default = false })
+    sec:toggle({  name = "FOV Outline",               flag = "aimbot_fov_outline",           default = true  })
+    sec:toggle({  name = "FOV Lerp",                  flag = "aimbot_fov_lerp",              default = true  })
+    sec:slider({  name = "FOV Rotation Speed",        flag = "aimbot_fov_rotation_speed",    min = 0, max = 10, default = 0, interval = 0.1 })
+end
+
+-----------------------------------------------------------------------
+-- TRIGGERBOT
+-----------------------------------------------------------------------
+local tb_tab, tb_settings_tab = window:tab({
+    name = "Triggerbot", icon = ICO.aim, tabs = { "Main", "Settings" },
+})
+
+do
+    local col = tb_tab:column({})
+    local sec = col:section({ name = "Triggerbot", size = 1, icon = ICO.aim, default = true })
+    sec:toggle({  name = "Enabled",                   flag = "triggerbot_enabled",           default = false })
+    sec:keybind({ name = "Keybind",                   flag = "triggerbot_keybind",           key = nil, mode = "Toggle" })
+    sec:slider({  name = "Forget Time",               flag = "triggerbot_forget_time",       min = 0, max = 3, default = 0.5, interval = 0.01, suffix = "s" })
+    sec:slider({  name = "Max Distance",              flag = "triggerbot_max_distance",      min = 0, max = 500, default = 100, interval = 1 })
+    sec:slider({  name = "Reaction Time",             flag = "triggerbot_reaction_time",     min = 0, max = 500, default = 100, interval = 1, suffix = "ms" })
+    sec:slider({  name = "Reaction Time Offset",      flag = "triggerbot_reaction_time_offset", min = 0, max = 200, default = 0, interval = 1, suffix = "ms" })
+    sec:slider({  name = "Shoot Delay",               flag = "triggerbot_shoot_delay",       min = 0, max = 500, default = 0, interval = 1, suffix = "ms" })
+    sec:toggle({  name = "Scoped Only",               flag = "triggerbot_scoped",            default = false })
+    sec:dropdown({name = "Part Blacklist",            flag = "triggerbot_part_blacklist",    items = { "None", "Legs", "Arms" }, default = "None" })
+end
+
+do
+    local col = tb_settings_tab:column({})
+    local sec = col:section({ name = "Targeting", size = 1, icon = ICO.aim, default = true })
+    sec:toggle({  name = "Visible Only",              flag = "tb_visibleonly",               default = false })
+    sec:toggle({  name = "Ignore Protected",          flag = "tb_ignore_protected",          default = false })
 end
 
 -----------------------------------------------------------------------
