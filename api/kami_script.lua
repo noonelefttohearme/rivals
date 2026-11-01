@@ -277,14 +277,26 @@ do
     sec:keybind({ name = "Velocity Keybind",          flag = "movement_velocitykeybind",      key = nil, mode = "Toggle" })
     sec:slider({  name = "Walk Speed Multiplier",     flag = "movement_velocityvalue",        min = 1, max = 200, default = 50, interval = 1 })
     sec:toggle({  name = "Enable WalkSpeed Multiplier", flag = "Enable WalkSpeed Multiplier", default = false })
+    sec:toggle({  name = "Bhop",                       flag = "movement_bhop",                 default = false })
+    sec:keybind({ name = "Bhop Keybind",               flag = "movement_bhop_keybind",         key = nil, mode = "Toggle" })
+    sec:toggle({  name = "Long Jump",                  flag = "movement_longjump",             default = false })
+    sec:slider({  name = "Long Jump Force",            flag = "movement_longjump_force",       min = 1, max = 100, default = 30, interval = 1 })
     sec:toggle({  name = "Slide Boost",               flag = "movement_slideboost",           default = false })
     sec:slider({  name = "Slide Boost Value",         flag = "movement_slideboostvalue",      min = 1, max = 100, default = 30, interval = 1 })
     sec:toggle({  name = "Infinite Double Jumps",     flag = "movement_infinite_double_jump", default = false })
     sec:slider({  name = "Double Jump Height",        flag = "movement_double_jump_height",   min = 1, max = 10, default = 1, interval = 0.1 })
+    sec:toggle({  name = "Anti Knockback",             flag = "movement_anti_knockback",       default = false })
+    sec:toggle({  name = "Anti Ragdoll",               flag = "movement_anti_ragdoll",         default = false })
     sec:toggle({  name = "Jump Pads",                 flag = "Jump Pads",                     default = false })
     sec:toggle({  name = "Zero Assembly Velocity",    flag = "Zero Assembly Velocity",        default = false })
     sec:toggle({  name = "Camera Replication Decouple", flag = "Camera Replication Decouple", default = false })
     sec:slider({  name = "Surface Camera Elevation",  flag = "Surface Camera Elevation",      min = -20, max = 20, default = 0, interval = 0.5 })
+
+    local sec_fl = col:section({ name = "Fake Lag", size = 1, icon = ICO.movement, default = false })
+    sec_fl:toggle({  name = "Enabled",                 flag = "fake_lag_enabled",              default = false })
+    sec_fl:slider({  name = "Amount",                  flag = "fake_lag_amount",               min = 1, max = 20, default = 5, interval = 1 })
+    sec_fl:dropdown({name = "Mode",                    flag = "fake_lag_mode",                 items = { "Static", "Fluctuate", "Adaptive" }, default = "Static" })
+    sec_fl:keybind({ name = "Keybind",                 flag = "fake_lag_keybind",              key = nil, mode = "Toggle" })
 
     local sec2 = col:section({ name = "Anti-Aim", size = 1, icon = ICO.movement, default = false })
     sec2:toggle({  name = "Enabled",                  flag = "anti_aim_enabled",              default = false })
@@ -323,11 +335,17 @@ do
     sec:toggle({ name = "Full Auto",                  flag = "exploits_full_auto",            default = false })
     sec:slider({ name = "Fire Rate",                  flag = "exploits_firerate",             min = 1, max = 20, default = 5, interval = 1 })
     sec:toggle({ name = "No Spread",                  flag = "exploits_no_spread",            default = false })
+    sec:toggle({ name = "No Recoil",                  flag = "exploits_no_recoil",            default = false })
+    sec:slider({ name = "Recoil Amount",              flag = "exploits_recoil_amount",        min = 0, max = 100, default = 0, interval = 1, suffix = "%" })
+    sec:toggle({ name = "Infinite Ammo",              flag = "exploits_infinite_ammo",        default = false })
+    sec:toggle({ name = "No Reload",                  flag = "exploits_no_reload",            default = false })
     sec:toggle({ name = "Choke Limit",                flag = "Choke Limit",                   default = false })
     sec:toggle({ name = "Auto Buy Ammunition",        flag = "Auto Buy Ammunition",           default = false })
     sec:toggle({ name = "Auto Weapon Swap When Empty", flag = "Auto Weapon Swap When Empty",  default = false })
     sec:toggle({ name = "Wallbang V2 Solver",         flag = "Wallbang V2 Solver",            default = false })
     sec:toggle({ name = "Always Backstab",            flag = "exploits_always_backstab",      default = false })
+    sec:toggle({ name = "Kill Aura",                  flag = "exploits_kill_aura",            default = false })
+    sec:slider({ name = "Kill Aura Range",            flag = "exploits_kill_aura_range",      min = 5, max = 100, default = 20, interval = 1 })
     sec:toggle({ name = "FireHitbox",                 flag = "FireHitbox",                    default = false })
     sec:dropdown({name = "Hitbox Preset",             flag = "Hitbox Preset",                 items = { "Default", "Head", "Torso", "Full Body", "Rapid Body" }, default = "Default" })
 
@@ -340,7 +358,12 @@ end
 do
     local col = mv_melee:column({})
     local sec = col:section({ name = "Melee", size = 1, icon = ICO.misc, default = true })
+    sec:toggle({ name = "Auto Parry",                 flag = "exploits_auto_parry",           default = false })
+    sec:toggle({ name = "Auto Block",                 flag = "exploits_auto_block",           default = false })
+    sec:slider({ name = "Parry Window",               flag = "exploits_parry_window",         min = 0, max = 500, default = 100, interval = 10, suffix = "ms" })
     sec:toggle({ name = "Avoid Katana Deflect",       flag = "Avoid Katana Deflect",          default = false })
+    sec:toggle({ name = "Reach Hack",                 flag = "exploits_reach_hack",           default = false })
+    sec:slider({ name = "Reach Distance",             flag = "exploits_reach_distance",       min = 5, max = 100, default = 10, interval = 0.5 })
     sec:slider({ name = "Melee Desync Reach",         flag = "Melee Desync Reach",            min = 1, max = 50, default = 5, interval = 0.5 })
     sec:slider({ name = "Melee Safe Reach",           flag = "Melee Safe Reach",              min = 1, max = 20, default = 5, interval = 0.5 })
     sec:toggle({ name = "Melee Underground Strike",   flag = "ex_melee_underground",          default = false })
@@ -1049,6 +1072,46 @@ RunService.Stepped:Connect(function(_, dt)
     if flags["Zero Assembly Velocity"] and char then
         local root = char:FindFirstChild("HumanoidRootPart")
         if root then root.AssemblyLinearVelocity = Vector3.new(0, root.AssemblyLinearVelocity.Y, 0) end
+    end
+
+    if flags.movement_bhop and char then
+        local hum = getHum(char)
+        if hum and hum:GetState() == Enum.HumanoidStateType.Landed then
+            hum.Jump = true
+        end
+    end
+
+    if flags.movement_anti_knockback and char then
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if root then
+            local vel = root.AssemblyLinearVelocity
+            if vel.Magnitude > 50 then
+                root.AssemblyLinearVelocity = Vector3.new(0, math.max(vel.Y, 0), 0)
+            end
+        end
+    end
+
+    if flags.movement_anti_ragdoll and char then
+        local hum = getHum(char)
+        if hum and hum:GetState() == Enum.HumanoidStateType.Ragdoll then
+            hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end
+    end
+
+    if flags.exploits_kill_aura and char then
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if root then
+            local range = flags.exploits_kill_aura_range or 20
+            for _, p in Players:GetPlayers() do
+                if p ~= LP and isAlive(p) then
+                    local ec = getChar(p)
+                    local er = ec and ec:FindFirstChild("HumanoidRootPart")
+                    if er and (er.Position - root.Position).Magnitude <= range then
+                        fire()
+                    end
+                end
+            end
+        end
     end
 
     if flags.anti_aim_enabled and char then
