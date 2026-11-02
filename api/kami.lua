@@ -491089,6 +491089,19 @@ end)
     -- ── ESP tab ───────────────────────────────────────────────
     local espTabObj = _tabObjects[3]
 
+    local dmgNumSec = UI.createSection(espTabObj, "Damage Numbers", "left")
+    UI.addToggle(dmgNumSec, "Damage Numbers",    false, function(v) _ext["dmg_num_on"]     = v end)
+    UI.addDropdown(dmgNumSec, "Font",
+        {"Monocraft","PressStart2P","Code","GothamBold","Arial","Oswald"},
+        "Monocraft",
+        function(v) _ext["dmg_num_font"] = v end)
+    UI.addSlider(dmgNumSec, "Font Size",         12, 36, 18, false, function(v) _ext["dmg_num_size"]     = v end)
+    UI.addSlider(dmgNumSec, "Float Speed",       1, 10, 4,  false, function(v) _ext["dmg_num_speed"]    = v end)
+    UI.addSlider(dmgNumSec, "Fade Time",         0.3, 3, 1, true,  function(v) _ext["dmg_num_fade"]     = v end)
+    UI.addColorPicker(dmgNumSec, "Number Color", Color3.fromRGB(255, 215, 0), function(v) _ext["dmg_num_color"] = v end)
+    UI.addToggle(dmgNumSec, "Show Crit (x2+)",   true,  function(v) _ext["dmg_num_crit"]    = v end)
+    UI.addToggle(dmgNumSec, "Outline",            true,  function(v) _ext["dmg_num_outline"] = v end)
+
     local espExtSec = UI.createSection(espTabObj, "Extended ESP", "left")
     UI.addToggle(espExtSec, "Rank Badge",          false, function(v) _ext["esp_rank_badge"] = v end)
     UI.addToggle(espExtSec, "Deflecting (Katana)", false, function(v) _ext["esp_deflecting"]  = v end)
@@ -491626,6 +491639,87 @@ end)
 do
     local _LP  = Players.LocalPlayer
     local _hue = 0
+
+    -- ── damage numbers system ─────────────────────────────────
+    local _dmgParticles = {}  -- { drawing, y, alpha, timer }
+
+    local _fontMap = {
+        ["Monocraft"]   = "rbxasset://fonts/families/RobotoMono.json",
+        ["PressStart2P"]= "rbxasset://fonts/families/PressStart2P.json",
+        ["Code"]        = "rbxasset://fonts/families/Code.json",
+        ["GothamBold"]  = "rbxasset://fonts/families/GothamSSm.json",
+        ["Arial"]       = "rbxasset://fonts/families/Arial.json",
+        ["Oswald"]      = "rbxasset://fonts/families/Oswald.json",
+    }
+
+    local function _spawnDmgNum(screenPos, dmg, isCrit)
+        if not _ext["dmg_num_on"] then return end
+        local txt = Drawing.new("Text")
+        txt.Text    = isCrit and ("!!"..tostring(dmg).."!!") or tostring(dmg)
+        txt.Size    = _ext["dmg_num_size"] or 18
+        txt.Color   = isCrit and Color3.fromRGB(255,80,80) or (_ext["dmg_num_color"] or Color3.fromRGB(255,215,0))
+        txt.Outline = (_ext["dmg_num_outline"] ~= false)
+        txt.Center  = true
+        txt.Position = Vector2.new(screenPos.X + (math.random()-0.5)*24, screenPos.Y)
+        txt.Visible = true
+        table.insert(_dmgParticles, {
+            d      = txt,
+            y      = screenPos.Y,
+            alpha  = 1,
+            timer  = 0,
+        })
+    end
+
+    -- track enemy HP to detect damage
+    local _lastHP = {}
+    local function _watchChar(plr)
+        local char = plr.Character
+        if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+        _lastHP[plr] = hum.Health
+        hum:GetPropertyChangedSignal("Health"):Connect(function()
+            local newHP = hum.Health
+            local oldHP = _lastHP[plr] or newHP
+            local delta = math.floor(oldHP - newHP)
+            _lastHP[plr] = newHP
+            if delta <= 0 then return end
+            -- only show when WE likely caused it (rough: within 500 studs)
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local myHrp = _LP.Character and _LP.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp or not myHrp then return end
+            if (hrp.Position - myHrp.Position).Magnitude > 600 then return end
+            local sp, vis = workspace.CurrentCamera:WorldToScreenPoint(hrp.Position + Vector3.new(0,2.5,0))
+            if not vis then return end
+            local isCrit = _ext["dmg_num_crit"] and delta >= 20
+            _spawnDmgNum(Vector2.new(sp.X, sp.Y), delta, isCrit)
+        end)
+        plr.CharacterAdded:Connect(function() task.wait(1); _watchChar(plr) end)
+    end
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= _LP then _watchChar(plr) end
+    end
+    Players.PlayerAdded:Connect(function(plr)
+        plr.CharacterAdded:Connect(function() task.wait(1); _watchChar(plr) end)
+    end)
+
+    RunService.RenderStepped:Connect(function(dt)
+        local speed = _ext["dmg_num_speed"] or 4
+        local fade  = _ext["dmg_num_fade"]  or 1
+        for i = #_dmgParticles, 1, -1 do
+            local p = _dmgParticles[i]
+            p.timer = p.timer + dt
+            p.y     = p.y - speed * dt * 30
+            p.alpha = math.max(0, 1 - (p.timer / fade))
+            p.d.Position = Vector2.new(p.d.Position.X, p.y)
+            p.d.Transparency = 1 - p.alpha
+            if p.alpha <= 0 then
+                pcall(function() p.d:Remove() end)
+                table.remove(_dmgParticles, i)
+            end
+        end
+    end)
 
     -- ghost billboard
     local _ghostBB = nil
