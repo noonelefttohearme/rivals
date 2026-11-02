@@ -3843,8 +3843,6 @@ do
     sec:toggle({  name = "FOV Outline",               flag = "silent_fov_outline",            default = true })
     sec:toggle({  name = "FOV Lerp",                  flag = "silent_fov_lerp",               default = true })
     sec:slider({  name = "FOV Rotation Speed",        flag = "silent_fov_rotation_speed",     min = 0, max = 10, default = 0, interval = 0.1 })
-    sec:toggle({  name = "Riot Shield Check",         flag = "silent_riot_shield_check",      default = false })
-    sec:toggle({  name = "Avoid Katana Deflect",      flag = "silent_avoid_deflect",          default = false })
 end
 
 -- AIMBOT
@@ -3920,22 +3918,11 @@ do
     sec:toggle({ name = "Head Marker Outline",        flag = "Head Marker Outline",           default = false })
     sec:dropdown({name = "Head Marker Shape",         flag = "Head Marker Shape",             items = { "Circle", "Square", "Diamond" }, default = "Circle" })
     sec:toggle({ name = "Win Streak",                 flag = "Win Streak",                    default = false })
-    sec:toggle({ name = "Rank Badge",                 flag = "esp_rank_badge",                default = false })
-    sec:toggle({ name = "Deflecting (Katana Shield)", flag = "esp_deflecting",                default = false })
     sec:toggle({ name = "Arrow (Off-Screen)",         flag = "esp_arrow",                     default = false })
     sec:slider({ name = "Arrow Radius",               flag = "Arrow Radius",                  min = 50, max = 400, default = 200, interval = 5 })
     sec:slider({ name = "Max Render Distance",        flag = "Max Render Distance",           min = 100, max = 10000, default = 5000, interval = 100 })
     sec:dropdown({name = "ESP Font",                  flag = "ESP Font",                      items = { "Default", "Monospace", "Gotham", "Tahoma", "Arial", "SourceSans", "Code", "Roboto" }, default = "Default" })
     sec:slider({ name = "ESP Font Size",              flag = "ESP Font Size",                 min = 8, max = 24, default = 13, interval = 1 })
-
-    local sec_col = col:section({ name = "ESP Colors", size = 1, icon = ICO.esp, default = false })
-    sec_col:colorpicker({ name = "Box Color",         flag = "esp_box_color",         color = rgb(255,255,255) })
-    sec_col:colorpicker({ name = "Fill Color",        flag = "esp_fill_color",        color = rgb(255,255,255), alpha = 0.5 })
-    sec_col:colorpicker({ name = "Name Color",        flag = "esp_name_color",        color = rgb(255,255,255) })
-    sec_col:colorpicker({ name = "HP Bar Color",      flag = "esp_hp_color",          color = rgb(0,255,100) })
-    sec_col:colorpicker({ name = "Distance Color",    flag = "esp_dist_color",        color = rgb(180,180,180) })
-    sec_col:colorpicker({ name = "Tracer Color",      flag = "esp_tracer_color",      color = rgb(255,255,255) })
-    sec_col:colorpicker({ name = "Skeleton Color",    flag = "esp_skel_color",        color = rgb(255,255,255) })
 
     local sec2 = col2:section({ name = "Teammates ESP", size = 1, icon = ICO.esp, default = true })
     sec2:toggle({ name = "Enable Teammates ESP",      flag = "Enable Teammates ESP",          default = false })
@@ -4044,8 +4031,6 @@ do
     local sec_fl = col2:section({ name = "Fake Lag", size = 1, icon = ICO.movement, default = true })
     sec_fl:toggle({  name = "Enabled",                 flag = "fake_lag_enabled",              default = false })
     sec_fl:slider({  name = "Amount",                  flag = "fake_lag_amount",               min = 1, max = 20, default = 5, interval = 1 })
-    sec_fl:dropdown({name = "Mode",                    flag = "fake_lag_mode",                 items = { "Static", "Fluctuate", "Adaptive", "Random", "Pulse" }, default = "Static" })
-    sec_fl:toggle({  name = "Break Lag Comp (LC Breaker)", flag = "fake_lag_break_lc",        default = false })
     sec_fl:keybind({ name = "Keybind",                 flag = "fake_lag_keybind",              key = nil, mode = "Toggle" })
 
     local sec2 = col2:section({ name = "Anti-Aim", size = 1, icon = ICO.movement, default = true })
@@ -4058,8 +4043,6 @@ do
     sec2:slider({  name = "Spinbot Yaw Speed",        flag = "Spinbot Yaw Speed",             min = 1, max = 50, default = 10, interval = 1 })
     sec2:toggle({  name = "Floor Hide",               flag = "anti_aim_floor_hide",           default = false })
     sec2:keybind({ name = "Floor Hide Keybind",       flag = "anti_aim_floor_hide_keybind",   key = nil, mode = "Hold" })
-    sec2:toggle({  name = "Preserve Movement Direction", flag = "aa_preserve_movement",       default = false })
-    sec2:toggle({  name = "Pause On Attack / Knife",  flag = "aa_pause_on_attack",            default = false })
 end
 
 do
@@ -4078,14 +4061,7 @@ do
     local sec3 = col:section({ name = "Underground / Fake Position", size = 1, icon = ICO.movement, default = false })
     sec3:toggle({ name = "Underground V2",            flag = "Underground V2",                default = false })
     sec3:slider({ name = "Underground Depth",         flag = "Underground Depth",             min = -50, max = 0, default = -5, interval = 0.5 })
-    sec3:toggle({ name = "Dynamic Walk (WASD Smooth)", flag = "fp_dynamic_walk",             default = false })
-    sec3:toggle({ name = "Auto Handoff On Shoot",     flag = "fp_auto_handoff",               default = false })
     sec3:toggle({ name = "Melee Underground Strike",  flag = "Melee Underground Strike",      default = false })
-    sec3:toggle({ name = "Invert Head Pitch (Anti-Headshot)", flag = "fp_invert_pitch",       default = false })
-    sec3:toggle({ name = "Panic Jitter Mode",         flag = "fp_panic_jitter",               default = false })
-    sec3:slider({ name = "Panic Jitter Range",        flag = "fp_panic_range",                min = 1, max = 15, default = 5, interval = 1 })
-    sec3:toggle({ name = "Visualise Ghost (Fake Pos)", flag = "fp_ghost_vis",                 default = false })
-    sec3:colorpicker({ name = "Ghost Color",          flag = "fp_ghost_color",                color = rgb(0,162,255), alpha = 0.5 })
 end
 
 do
@@ -4110,7 +4086,6 @@ do
 
     local sec2 = col:section({ name = "Game Utilities", size = 1, icon = ICO.misc, default = false })
     sec2:toggle({ name = "Arcade Auto Respawn",       flag = "arcade_auto_respawn",           default = false })
-    sec2:toggle({ name = "Auto Void On Low HP (< 25)", flag = "auto_void_low_hp",             default = false })
     sec2:toggle({ name = "Enable Auto Loadout",       flag = "Enable Auto Loadout",           default = false })
     sec2:dropdown({name = "Preferred Weapon",         flag = "preferred weapon",              items = { "None", "Assault Rifle", "Sniper", "Bow", "Crossbow", "Shotgun", "Minigun", "Burst Rifle", "Uzi", "Vandal" }, default = "None" })
 end
@@ -4289,9 +4264,6 @@ do
     sec:toggle({ name = "Lerp",                       flag = "crosshair_lerp",                default = true })
     sec:toggle({ name = "Rotation",                   flag = "crosshair_rotation",            default = false })
     sec:slider({ name = "Rotation Speed",             flag = "crosshair_rotation_speed",      min = 0.1, max = 10, default = 1, interval = 0.1 })
-    sec:toggle({ name = "Rainbow Crosshair",          flag = "crosshair_rainbow",             default = false })
-    sec:slider({ name = "Rainbow Speed",              flag = "crosshair_rainbow_speed",       min = 0.1, max = 5, default = 1, interval = 0.1 })
-    sec:slider({ name = "Bouncing Amplitude",         flag = "crosshair_bounce_amplitude",    min = 1, max = 30, default = 8, interval = 1 })
 
     local sec2 = col:section({ name = "FOV Circle", size = 1, icon = ICO.visuals, default = false })
     sec2:toggle({ name = "Filled FOV Circle",         flag = "crosshair_fov_filled",          default = false })
@@ -4376,11 +4348,6 @@ do
     sec5:slider({ name = "Haze",                      flag = "atmosphere_haze",               min = 0, max = 10, default = 0, interval = 0.1 })
     sec5:slider({ name = "Glare",                     flag = "atmosphere_glare",              min = 0, max = 1, default = 0, interval = 0.01 })
     sec5:slider({ name = "Decay",                     flag = "atmosphere_decay",              min = 0, max = 1, default = 0, interval = 0.01 })
-
-    local sec6 = col:section({ name = "Ambient Override", size = 1, icon = ICO.visuals, default = false })
-    sec6:toggle({ name = "Enabled",                  flag = "ambient_override_enabled",      default = false })
-    sec6:colorpicker({ name = "Ambient Color",       flag = "ambient_color",                 color = rgb(127,127,127) })
-    sec6:colorpicker({ name = "Outdoor Ambient",     flag = "ambient_outdoor_color",         color = rgb(127,127,127) })
 end
 
 do
@@ -4627,41 +4594,27 @@ local function updateEsp()
         local width  = height * 0.6
         local x, y  = topSc.X - width / 2, topSc.Y
 
-        local function cpColor(flag, fallback)
-            local v = flags[flag]
-            if type(v) == "table" and v.Color then return v.Color end
-            return fallback or Color3.fromRGB(255,255,255)
-        end
-
         local boxOn = (showEnemy and flags.esp_box) or (isTeam and flags["Teammate Box"])
         if boxOn and t.box then
-            t.box.Color = cpColor("esp_box_color", Color3.fromRGB(255,255,255))
-            t.box.Filled = flags.esp_fill or false
-            if t.box.Filled then t.box.Transparency = (flags.esp_fill_color and flags.esp_fill_color.Transparency) or 0.7 end
-            t.box.Size = Vector2.new(width, height)
+            t.box.Filled = flags.esp_fill or false; t.box.Size = Vector2.new(width, height)
             t.box.Position = Vector2.new(x, y); t.box.Visible = true
         elseif t.box then t.box.Visible = false end
 
         local nameOn = (showEnemy and flags.esp_name) or (isTeam and flags["Teammate Name"])
         if nameOn and t.name then
-            t.name.Color = cpColor("esp_name_color", Color3.fromRGB(255,255,255))
             t.name.Position = Vector2.new(topSc.X, y - 15); t.name.Visible = true
         elseif t.name then t.name.Visible = false end
 
         if flags.esp_distance and t.dist then
-            t.dist.Color = cpColor("esp_dist_color", Color3.fromRGB(180,180,180))
             t.dist.Text = dist3d.."m"; t.dist.Position = Vector2.new(topSc.X, y + height + 2); t.dist.Visible = true
         elseif t.dist then t.dist.Visible = false end
 
         local hpOn = (showEnemy and flags.esp_healthbar) or (isTeam and flags["Teammate Health Bar"])
         if hpOn and t.hpbg and t.hp then
             local ratio = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
-            local hpColUser = cpColor("esp_hp_color", nil)
-            local hpCol = (flags.esp_hp_color and type(flags.esp_hp_color) == "table") and hpColUser
-                       or Color3.fromRGB(255*(1-ratio), 255*ratio, 0)
             t.hpbg.Size = Vector2.new(4, height); t.hpbg.Position = Vector2.new(x - 6, y); t.hpbg.Visible = true
             t.hp.Size = Vector2.new(4, height * ratio); t.hp.Position = Vector2.new(x - 6, y + height * (1 - ratio))
-            t.hp.Color = hpCol; t.hp.Visible = true
+            t.hp.Color = Color3.fromRGB(255*(1-ratio), 255*ratio, 0); t.hp.Visible = true
         elseif t.hpbg then t.hpbg.Visible = false; if t.hp then t.hp.Visible = false end end
 
         if flags.esp_hp_num and t.hpnum then
@@ -4670,11 +4623,9 @@ local function updateEsp()
         elseif t.hpnum then t.hpnum.Visible = false end
 
         if flags.esp_skeleton and t.skel then
-            local skelCol = cpColor("esp_skel_color", Color3.fromRGB(255,255,255))
             for i, pair in SKEL do
                 local a = char:FindFirstChild(pair[1]); local b = char:FindFirstChild(pair[2])
-                if not t.skel[i] then t.skel[i] = Drawing.new("Line"); t.skel[i].Thickness = flags.esp_skeleton_thickness or 1 end
-                if t.skel[i] then t.skel[i].Color = skelCol end
+                if not t.skel[i] then t.skel[i] = Drawing.new("Line"); t.skel[i].Thickness = flags.esp_skeleton_thickness or 1; t.skel[i].Color = Color3.fromRGB(255,255,255) end
                 if a and b then
                     local sa, oa = Camera:WorldToViewportPoint(a.Position)
                     local sb, ob = Camera:WorldToViewportPoint(b.Position)
@@ -4704,36 +4655,8 @@ local function updateEsp()
                       or orig == "Mouse"  and UIS:GetMouseLocation()
                       or Vector2.new(vp.X/2, vp.Y)
             t.tracer.From = from; t.tracer.To = Vector2.new(topSc.X, y + height/2)
-            t.tracer.Color = cpColor("esp_tracer_color", Color3.fromRGB(255,255,255))
             t.tracer.Thickness = flags["Tracer Thickness"] or 1; t.tracer.Visible = true
         elseif t.tracer then t.tracer.Visible = false end
-
-        if flags.esp_rank_badge and t.name then
-            local rankVal = p:GetAttribute("Rank") or ""
-            if rankVal ~= "" then
-                if not t.rank then t.rank = Drawing.new("Text"); t.rank.Size = 11; t.rank.Outline = true; t.rank.Color = Color3.fromRGB(255,215,0) end
-                t.rank.Text = "["..tostring(rankVal).."]"
-                t.rank.Position = Vector2.new(topSc.X, y - 26); t.rank.Visible = true
-            end
-        elseif t.rank then t.rank.Visible = false end
-
-        if flags.esp_deflecting then
-            local anim = char:FindFirstChildWhichIsA("Humanoid")
-            local animator = anim and anim:FindFirstChildOfClass("Animator")
-            local isDeflecting = false
-            if animator then
-                for _, track in animator:GetPlayingAnimationTracks() do
-                    if track.Name:lower():find("deflect") or track.Name:lower():find("block") then
-                        isDeflecting = true; break
-                    end
-                end
-            end
-            if isDeflecting then
-                if not t.deflectlabel then t.deflectlabel = Drawing.new("Text"); t.deflectlabel.Size = 11; t.deflectlabel.Outline = true; t.deflectlabel.Color = Color3.fromRGB(255,100,100) end
-                t.deflectlabel.Text = "[DEFLECTING]"
-                t.deflectlabel.Position = Vector2.new(topSc.X, y + height + 14); t.deflectlabel.Visible = true
-            elseif t.deflectlabel then t.deflectlabel.Visible = false end
-        elseif t.deflectlabel then t.deflectlabel.Visible = false end
     end
 end
 
@@ -4751,18 +4674,11 @@ local function updateCrosshair()
     end
     local vp = Camera.ViewportSize; local cx, cy = vp.X/2, vp.Y/2
     local len = flags.crosshair_length or 8; local gap = flags.crosshair_offset or 4
-    local th  = flags.crosshair_thickness or 2
-    local col
-    if flags.crosshair_rainbow then
-        col = Color3.fromHSV(tick() * (flags.crosshair_rainbow_speed or 1) % 1, 1, 1)
-    else
-        col = Color3.fromRGB(255,255,255)
-    end
+    local th  = flags.crosshair_thickness or 2; local col = Color3.fromRGB(255,255,255)
     local style = flags.crosshair_style or "Cross"
     local bounceY = 0
     if flags.crosshair_bounce then
-        local amp = flags.crosshair_bounce_amplitude or 8
-        bounceY = math.sin(tick() * (flags.crosshair_bounce_speed or 1) * math.pi * 2) * amp * 0.3
+        bounceY = math.sin(tick() * (flags.crosshair_bounce_speed or 1) * math.pi * 2) * (flags.crosshair_bounce_speed or 1) * 0.3
     end
     local cy2 = cy + bounceY
     chLines[1].From = Vector2.new(cx-len-gap, cy2); chLines[1].To = Vector2.new(cx-gap, cy2); chLines[1].Thickness = th; chLines[1].Color = col; chLines[1].Visible = true
@@ -4834,14 +4750,6 @@ local function applyLighting()
         atm.Decay   = flags.atmosphere_decay   or 0
     end
 
-    if flags.ambient_override_enabled then
-        if flags.ambient_color and type(flags.ambient_color) == "table" and flags.ambient_color.Color then
-            Lighting.Ambient = flags.ambient_color.Color
-        end
-        if flags.ambient_outdoor_color and type(flags.ambient_outdoor_color) == "table" and flags.ambient_outdoor_color.Color then
-            Lighting.OutdoorAmbient = flags.ambient_outdoor_color.Color
-        end
-    end
 end
 
 -----------------------------------------------------------------------
@@ -4954,8 +4862,9 @@ RunService.Stepped:Connect(function(_, dt)
         if root then
             local hum = getHum(char)
             local isMoving = hum and hum.MoveDirection.Magnitude > 0.1
-            local skipAA = (flags.aa_preserve_movement and isMoving)
-                        or (flags.aa_pause_on_attack and (UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) or UIS:IsKeyDown(Enum.KeyCode.Q)))
+            local skipAA = isMoving
+                        or UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+                        or UIS:IsKeyDown(Enum.KeyCode.Q)
             if not skipAA then
                 if flags.anti_aim_yaw == "Spin" or flags.spinbot then
                     root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(flags["Spinbot Yaw Speed"] or 10), 0)
@@ -4982,23 +4891,7 @@ RunService.Stepped:Connect(function(_, dt)
         local root = char:FindFirstChild("HumanoidRootPart")
         if root then
             local depth = flags["Underground Depth"] or -5
-            local tx, tz = root.Position.X, root.Position.Z
-            local jitter = Vector3.new(0, 0, 0)
-            if flags.fp_panic_jitter then
-                local range = flags.fp_panic_range or 5
-                jitter = Vector3.new(math.random(-range, range) * 0.01, 0, math.random(-range, range) * 0.01)
-            end
-            root.CFrame = CFrame.new(tx + jitter.X, depth, tz + jitter.Z) * CFrame.Angles(0, root.CFrame:ToEulerAnglesYXZ(), 0)
-        end
-    end
-
-    if flags.auto_void_low_hp and char then
-        local hum = getHum(char)
-        if hum and hum.Health < 25 then
-            local root = char:FindFirstChild("HumanoidRootPart")
-            if root then
-                root.CFrame = CFrame.new(root.Position.X, -500, root.Position.Z)
-            end
+            root.CFrame = CFrame.new(root.Position.X, depth, root.Position.Z) * CFrame.Angles(0, root.CFrame:ToEulerAnglesYXZ(), 0)
         end
     end
 
@@ -5007,21 +4900,8 @@ RunService.Stepped:Connect(function(_, dt)
         local root = char:FindFirstChild("HumanoidRootPart")
         if root then
             local amount = flags.fake_lag_amount or 5
-            local mode   = flags.fake_lag_mode or "Static"
-            local skip   = false
-            if mode == "Static" then
-                skip = (math.floor(flTick * 20) % amount == 0)
-            elseif mode == "Fluctuate" then
-                skip = (math.floor(flTick * 20) % math.max(1, math.floor(amount * (0.5 + 0.5 * math.sin(flTick * 2)))) == 0)
-            elseif mode == "Adaptive" then
-                local vel = root.AssemblyLinearVelocity.Magnitude
-                skip = (vel > 5) and (math.floor(flTick * 20) % amount == 0)
-            elseif mode == "Random" then
-                skip = (math.random(1, amount) == 1)
-            elseif mode == "Pulse" then
-                skip = (math.floor(flTick * 2) % 2 == 0) and (math.floor(flTick * 20) % amount == 0)
-            end
-            if flags.fake_lag_break_lc and not skip then
+            local skip = (math.floor(flTick * 20) % amount == 0)
+            if not skip then
                 root.AssemblyLinearVelocity = root.AssemblyLinearVelocity * Vector3.new(-1, 1, -1)
             end
             if skip then
@@ -5062,13 +4942,11 @@ RunService.RenderStepped:Connect(function(dt)
         local target = getTarget(flags.silent_radius or 180, prioMode, visOnly, limDist, maxDist)
         if target then
             local skipTarget = false
-            if flags.silent_riot_shield_check then
-                local tool = target.char:FindFirstChildWhichIsA("Tool")
-                if tool and (tool.Name:lower():find("shield") or tool.Name:lower():find("riot")) then
-                    skipTarget = true
-                end
+            local tool = target.char:FindFirstChildWhichIsA("Tool")
+            if tool and (tool.Name:lower():find("shield") or tool.Name:lower():find("riot")) then
+                skipTarget = true
             end
-            if flags.silent_avoid_deflect then
+            if flags["Avoid Katana Deflect"] then
                 local anim = target.char:FindFirstChildWhichIsA("Humanoid")
                 local animator = anim and anim:FindFirstChildOfClass("Animator")
                 if animator then
