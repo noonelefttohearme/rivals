@@ -491212,13 +491212,45 @@ end)
     UI.addColorPicker(lightExtSec, "Ambient Color",   Color3.fromRGB(127,127,127), function(v) _ext["ambient_color"]         = v end)
     UI.addColorPicker(lightExtSec, "Outdoor Ambient", Color3.fromRGB(127,127,127), function(v) _ext["ambient_outdoor_color"] = v end)
 
+    local _RIVALS_RANKS = {
+        "Unranked",
+        "Iron I","Iron II","Iron III",
+        "Bronze I","Bronze II","Bronze III",
+        "Silver I","Silver II","Silver III",
+        "Gold I","Gold II","Gold III",
+        "Platinum I","Platinum II","Platinum III",
+        "Diamond I","Diamond II","Diamond III",
+        "Ascendant I","Ascendant II","Ascendant III",
+        "Immortal I","Immortal II","Immortal III",
+        "Radiant",
+    }
+    local _RANK_MMR = {
+        ["Unranked"]=0,
+        ["Iron I"]=100,["Iron II"]=200,["Iron III"]=300,
+        ["Bronze I"]=400,["Bronze II"]=500,["Bronze III"]=600,
+        ["Silver I"]=700,["Silver II"]=800,["Silver III"]=900,
+        ["Gold I"]=1000,["Gold II"]=1100,["Gold III"]=1200,
+        ["Platinum I"]=1300,["Platinum II"]=1400,["Platinum III"]=1500,
+        ["Diamond I"]=1600,["Diamond II"]=1700,["Diamond III"]=1800,
+        ["Ascendant I"]=1900,["Ascendant II"]=2000,["Ascendant III"]=2100,
+        ["Immortal I"]=2200,["Immortal II"]=2300,["Immortal III"]=2400,
+        ["Radiant"]=2500,
+    }
+
     local spoofSec = UI.createSection(miscTabObj, "Spoof", "left")
-    UI.addToggle(spoofSec, "Spoof Rank",       false, function(v) _ext["spoof_rank"]   = v end)
-    UI.addSlider(spoofSec, "Rank Value",        0, 9999, 500, false, function(v) _ext["spoof_rank_val"]   = v end)
-    UI.addToggle(spoofSec, "Spoof Level",      false, function(v) _ext["spoof_level"]  = v end)
+    UI.addToggle(spoofSec, "Spoof Rank",       false, function(v) _ext["spoof_rank"]     = v end)
+    UI.addDropdown(spoofSec, "Rank", _RIVALS_RANKS, "Gold II", function(v)
+        _ext["spoof_rank_str"] = v
+        _ext["spoof_rank_mmr"] = _RANK_MMR[v] or 1100
+    end)
+    UI.addToggle(spoofSec, "Spoof Level",      false, function(v) _ext["spoof_level"]    = v end)
     UI.addSlider(spoofSec, "Level Value",       1, 999,  50,  false, function(v) _ext["spoof_level_val"]  = v end)
-    UI.addToggle(spoofSec, "Spoof Win Streak", false, function(v) _ext["spoof_streak"] = v end)
+    UI.addToggle(spoofSec, "Spoof Win Streak", false, function(v) _ext["spoof_streak"]   = v end)
     UI.addSlider(spoofSec, "Win Streak Value",  0, 999,  25,  false, function(v) _ext["spoof_streak_val"] = v end)
+
+    local appearSec = UI.createSection(miscTabObj, "Appearance", "right")
+    UI.addToggle(appearSec, "Headless",    false, function(v) _ext["headless_on"] = v end)
+    UI.addToggle(appearSec, "Jett Hands",  false, function(v) _ext["jett_hands"]  = v end)
 
 
     local _toggleKey   = Enum.KeyCode.RightShift
@@ -491856,20 +491888,82 @@ do
             end)
         end
 
-        -- leaderstats spoof — force values faster than server can replicate them back
+        -- leaderstats spoof
         if _ext["spoof_rank"] or _ext["spoof_level"] or _ext["spoof_streak"] then
             local lead = _LP:FindFirstChild("leaderstats")
             if lead then
                 for _, v in ipairs(lead:GetChildren()) do
                     local n = v.Name:lower():gsub("%s+","")
-                    if _ext["spoof_rank"] and (n=="rank" or n=="ranked") then
-                        pcall(function() v.Value = _ext["spoof_rank_val"] or 500 end)
+                    if _ext["spoof_rank"] and (n=="rank" or n=="ranked" or n=="elo" or n=="rating") then
+                        pcall(function()
+                            if type(v.Value) == "string" then
+                                v.Value = _ext["spoof_rank_str"] or "Gold II"
+                            else
+                                v.Value = _ext["spoof_rank_mmr"] or 1100
+                            end
+                        end)
                     elseif _ext["spoof_level"] and (n=="level" or n=="lvl" or n=="xp") then
                         pcall(function() v.Value = _ext["spoof_level_val"] or 50 end)
                     elseif _ext["spoof_streak"] and (n=="winstreak" or n=="streak" or n=="wins") then
                         pcall(function() v.Value = _ext["spoof_streak_val"] or 25 end)
                     end
                 end
+            end
+        end
+
+        -- headless (client-side)
+        if char then
+            local head = char:FindFirstChild("Head")
+            if head then
+                local want = _ext["headless_on"] and 1 or 0
+                if head.Transparency ~= want then
+                    head.Transparency = want
+                    local face = head:FindFirstChildOfClass("Decal")
+                    if face then face.Transparency = want end
+                end
+            end
+            -- head accessories
+            for _, obj in ipairs(char:GetChildren()) do
+                if obj:IsA("Accessory") then
+                    local handle = obj:FindFirstChild("Handle")
+                    if handle then
+                        local isHead = handle:FindFirstChild("HatAttachment")
+                            or handle:FindFirstChild("FaceFrontAttachment")
+                            or handle:FindFirstChild("FaceCenterAttachment")
+                            or handle:FindFirstChild("HairAttachment")
+                        if isHead then
+                            local want2 = _ext["headless_on"] and 1 or 0
+                            if handle.Transparency ~= want2 then handle.Transparency = want2 end
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Jett hands
+        if char and _ext["jett_hands"] then
+            local JETT_SKIN  = Color3.fromRGB(240, 178, 148)
+            local JETT_GLOVE = Color3.fromRGB(22,  20,  28)
+            local R15_UPPER  = {"LeftUpperArm","RightUpperArm"}
+            local R15_LOWER  = {"LeftLowerArm","RightLowerArm","LeftHand","RightHand"}
+            for _, name in ipairs(R15_UPPER) do
+                local p = char:FindFirstChild(name)
+                if p then pcall(function() p.Color = JETT_SKIN end) end
+            end
+            for _, name in ipairs(R15_LOWER) do
+                local p = char:FindFirstChild(name)
+                if p then pcall(function() p.Color = JETT_GLOVE end) end
+            end
+            -- R6 fallback: whole arm = skin, no separate hand
+            local r6L = char:FindFirstChild("Left Arm")
+            local r6R = char:FindFirstChild("Right Arm")
+            if r6L then pcall(function() r6L.Color = JETT_SKIN end) end
+            if r6R then pcall(function() r6R.Color = JETT_SKIN end) end
+            -- sync BodyColors so respawn doesn't flash
+            local bc = char:FindFirstChildOfClass("BodyColors")
+            if bc then
+                pcall(function() bc.LeftArmColor3  = JETT_SKIN end)
+                pcall(function() bc.RightArmColor3 = JETT_SKIN end)
             end
         end
     end)
