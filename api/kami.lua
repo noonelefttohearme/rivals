@@ -489552,6 +489552,12 @@ do
         pcall(function() UI_FONT = Font.fromEnum(Enum.Font.Arcade) end)
         FONT_SOURCE = "Arcade (last resort)"
     end
+    if not UI_FONT then
+        for _, fe in ipairs({Enum.Font.Code, Enum.Font.RobotoMono, Enum.Font.SourceSans}) do
+            local ok, f = pcall(Font.fromEnum, fe)
+            if ok and f then UI_FONT = f; FONT_SOURCE = tostring(fe); break end
+        end
+    end
 end
 
 local COLORS = {
@@ -491176,8 +491182,14 @@ end)
     local aimTabObj = _tabObjects[2]
 
     local silentExtSec = UI.createSection(aimTabObj, "Silent Aim", "left")
-    UI.addToggle(silentExtSec, "Riot Shield Check",    false, function(v) _ext["silent_riot_shield_check"] = v end)
-    UI.addToggle(silentExtSec, "Avoid Katana Deflect", false, function(v) _ext["silent_avoid_deflect"]     = v end)
+    UI.addToggle(silentExtSec, "Riot Shield Check",    false, function(v)
+        _ext["silent_riot_shield_check"] = v
+        _activate("silent_riot_shield_check", "Toggles", v)
+    end)
+    UI.addToggle(silentExtSec, "Avoid Katana Deflect", false, function(v)
+        _ext["silent_avoid_deflect"] = v
+        _activate("silent_avoid_deflect", "Toggles", v)
+    end)
     UI.addToggle(silentExtSec, "FOV Gradient Fill",    false, function(v) _ext["fov_fill_grad"]            = v end)
     UI.addColorPicker(silentExtSec, "FOV Fill Color", Color3.fromRGB(210,170,55), function(v) _ext["fov_fill_color"] = v end)
     UI.addSlider(silentExtSec, "FOV Fill Opacity", 2, 20, 6, false, function(v) _ext["fov_fill_alpha"] = v / 100 end)
@@ -491776,34 +491788,36 @@ do
 
     local function _spawnDmgNum(hrp, dmg, isCrit)
         if not _ext["dmg_num_on"] then return end
-        local bb = Instance.new("BillboardGui")
-        bb.AlwaysOnTop  = true
-        bb.Size         = UDim2.new(0, 90, 0, 32)
-        bb.StudsOffset  = Vector3.new((math.random()-0.5)*3, 3 + math.random()*2, 0)
-        bb.Adornee      = hrp
-        bb.Parent       = hrp
-        local lbl = Instance.new("TextLabel", bb)
-        lbl.Size                  = UDim2.new(1,0,1,0)
-        lbl.BackgroundTransparency= 1
-        lbl.Text                  = isCrit and ("!!"..tostring(dmg).."!!") or tostring(dmg)
-        lbl.TextColor3            = isCrit and Color3.fromRGB(255,50,50) or (_ext["dmg_num_color"] or Color3.fromRGB(255,215,0))
-        lbl.TextStrokeTransparency= 0
-        lbl.TextStrokeColor3      = Color3.new(0,0,0)
-        lbl.Font                  = Enum.Font.GothamBold
-        lbl.TextSize              = _ext["dmg_num_size"] or 18
-        local startOff = bb.StudsOffset
-        local fade = _ext["dmg_num_fade"] or 1
-        local spd  = (_ext["dmg_num_speed"] or 4) * 2
-        local t0 = tick()
+        local cam   = workspace.CurrentCamera
+        local label = isCrit and ("!!"..tostring(dmg).."!!") or tostring(dmg)
+        local color = isCrit and Color3.fromRGB(255,50,50) or (_ext["dmg_num_color"] or Color3.fromRGB(255,215,0))
+        local sz    = _ext["dmg_num_size"] or 18
+        local fade  = _ext["dmg_num_fade"] or 1
+        local spd   = (_ext["dmg_num_speed"] or 4) * 30
+        local driftX = (math.random() - 0.5) * 50
+        local t0    = tick()
         task.spawn(function()
-            while tick()-t0 < fade do
-                local p = (tick()-t0)/fade
-                bb.StudsOffset = startOff + Vector3.new(0, p*spd, 0)
-                lbl.TextTransparency      = p
-                lbl.TextStrokeTransparency= p
+            local d = Drawing.new("Text")
+            d.Text         = label
+            d.Color        = color
+            d.Size         = sz
+            d.Center       = true
+            d.Outline      = true
+            d.OutlineColor = Color3.new(0, 0, 0)
+            d.Visible      = true
+            d.Transparency = 0
+            while tick() - t0 < fade do
+                local sp, vis = cam:WorldToScreenPoint(hrp.Position + Vector3.new(0, 3, 0))
+                if vis then
+                    local p = (tick() - t0) / fade
+                    d.Position     = Vector2.new(sp.X + driftX, sp.Y - p * spd)
+                    d.Transparency = p
+                else
+                    d.Visible = false
+                end
                 task.wait(1/30)
             end
-            pcall(function() bb:Destroy() end)
+            pcall(function() d:Remove() end)
         end)
     end
 
@@ -491817,23 +491831,30 @@ do
         if not (_ext["spoof_rank"] or _ext["spoof_level"] or _ext["spoof_streak"]) then return end
         for _, d in ipairs(root:GetDescendants()) do
             if d:IsA("TextLabel") or d:IsA("TextBox") then
-                -- build context from element name + sibling names/text
+                local txt = d.Text
+                if txt == "" or txt == "..." then continue end
+                -- build context from element name + sibling names/text + parent name
                 local ctx = d.Name:lower()
                 local par = d.Parent
                 if par then
+                    ctx = ctx .. " " .. par.Name:lower()
                     for _, s in ipairs(par:GetChildren()) do
                         ctx = ctx .. " " .. s.Name:lower()
                         if s:IsA("TextLabel") and s ~= d then ctx = ctx .. " " .. s.Text:lower() end
                     end
+                    if par.Parent then ctx = ctx .. " " .. par.Parent.Name:lower() end
                 end
-                local raw = d.Text:match("^%s*([%d,%.]+)%s*$")
-                if raw then
-                    if _ext["spoof_rank"] and (ctx:find("rank") or ctx:find("elo") or ctx:find("rating") or ctx:find("mmr") or ctx:find("score")) then
-                        pcall(function() d.Text = tostring(_ext["spoof_rank_val"] or 1000) end)
-                    elseif _ext["spoof_level"] and (ctx:find("level") or ctx:find("lvl") or ctx:find("xp") or ctx:find("prestige")) then
-                        pcall(function() d.Text = tostring(_ext["spoof_level_val"] or 50) end)
+                -- also include the element's own text as context (for "60 Level", "62 Streak")
+                ctx = ctx .. " " .. txt:lower()
+                -- extract leading number from text (handles "60", "60 Level", "139 wins" etc.)
+                local num = txt:match("^%s*(%d+)")
+                if num then
+                    if _ext["spoof_rank"] and (ctx:find("rank") or ctx:find("elo") or ctx:find("rating") or ctx:find("mmr") or ctx:find("score") or ctx:find("sr ") or ctx:find(" sr")) then
+                        pcall(function() d.Text = txt:gsub("^%s*%d+", tostring(_ext["spoof_rank_val"] or 1000)) end)
+                    elseif _ext["spoof_level"] and (ctx:find("level") or ctx:find(" lv") or ctx:find("lvl") or ctx:find("xp") or ctx:find("prestige")) then
+                        pcall(function() d.Text = txt:gsub("^%s*%d+", tostring(_ext["spoof_level_val"] or 50)) end)
                     elseif _ext["spoof_streak"] and (ctx:find("streak") or ctx:find("win") or ctx:find("combo")) then
-                        pcall(function() d.Text = tostring(_ext["spoof_streak_val"] or 25) end)
+                        pcall(function() d.Text = txt:gsub("^%s*%d+", tostring(_ext["spoof_streak_val"] or 25)) end)
                     end
                 end
             end
@@ -491841,17 +491862,65 @@ do
     end
 
     -- patch new GUIs the moment they appear (profile panels, leaderboards, etc.)
-    _LP.PlayerGui.ChildAdded:Connect(function(child)
-        task.wait(0.25)
-        pcall(function() _patchGuiStats(child) end)
-        task.delay(1.5, function() pcall(function() _patchGuiStats(child) end) end)
-    end)
-    -- patch anything already open
-    task.delay(4, function()
+    local function _patchAllGuis()
         for _, gui in ipairs(_LP.PlayerGui:GetChildren()) do
             pcall(function() _patchGuiStats(gui) end)
         end
+    end
+    _LP.PlayerGui.ChildAdded:Connect(function(child)
+        -- patch immediately + retry with delays (profile data may load async)
+        for _, delay in ipairs({0.25, 0.75, 1.5, 3}) do
+            task.delay(delay, function() pcall(function() _patchGuiStats(child) end) end)
+        end
+        -- also watch for this GUI becoming enabled (Rivals may toggle .Enabled rather than add new child)
+        pcall(function()
+            child:GetPropertyChangedSignal("Enabled"):Connect(function()
+                if child.Enabled then
+                    task.delay(0.3, function() pcall(function() _patchGuiStats(child) end) end)
+                end
+            end)
+        end)
     end)
+    -- watch already-present GUIs for .Enabled toggles
+    for _, gui in ipairs(_LP.PlayerGui:GetChildren()) do
+        pcall(function()
+            gui:GetPropertyChangedSignal("Enabled"):Connect(function()
+                if gui.Enabled then
+                    task.delay(0.3, function() pcall(function() _patchGuiStats(gui) end) end)
+                end
+            end)
+        end)
+    end
+    task.delay(4, _patchAllGuis)
+
+    -- overhead spoofed stat display above dj's own head (client-side only)
+    local _overheadBB = nil
+    local _overheadLbl = nil
+    local function _updateOverhead()
+        local spoofOn = _ext["spoof_rank"] or _ext["spoof_level"] or _ext["spoof_streak"]
+        local c2 = _LP.Character
+        local hrp = c2 and c2:FindFirstChild("HumanoidRootPart")
+        if not spoofOn or not hrp then
+            if _overheadBB then pcall(function() _overheadBB:Destroy() end); _overheadBB = nil; _overheadLbl = nil end
+            return
+        end
+        if not _overheadBB or not _overheadBB.Parent then
+            _overheadBB = Instance.new("BillboardGui")
+            _overheadBB.Name = "KamiOverhead"; _overheadBB.AlwaysOnTop = false
+            _overheadBB.Size = UDim2.new(0, 200, 0, 20); _overheadBB.StudsOffset = Vector3.new(0, 3.5, 0)
+            _overheadBB.Adornee = hrp; _overheadBB.Parent = hrp
+            _overheadLbl = Instance.new("TextLabel", _overheadBB)
+            _overheadLbl.Size = UDim2.new(1,0,1,0); _overheadLbl.BackgroundTransparency = 1
+            _overheadLbl.TextColor3 = Color3.fromRGB(255, 215, 0)
+            _overheadLbl.TextStrokeTransparency = 0; _overheadLbl.TextStrokeColor3 = Color3.new(0,0,0)
+            _overheadLbl.Font = Enum.Font.GothamBold; _overheadLbl.TextSize = 12
+        end
+        local parts = {}
+        if _ext["spoof_rank"]   then parts[#parts+1] = "ELO " .. tostring(_ext["spoof_rank_val"] or 1000) end
+        if _ext["spoof_level"]  then parts[#parts+1] = "Lv." .. tostring(_ext["spoof_level_val"] or 50) end
+        if _ext["spoof_streak"] then parts[#parts+1] = "🔥" .. tostring(_ext["spoof_streak_val"] or 25) end
+        if _overheadLbl then _overheadLbl.Text = table.concat(parts, "  ") end
+    end
 
     -- dump ALL player stat containers to chat once (debug: find real key names)
     task.delay(5, function()
@@ -491888,10 +491957,26 @@ do
         _vmDestroy()
         task.spawn(function()
             local ok, container = pcall(function() return _IS:LoadAsset(_VM_ID) end)
-            if not ok or not container then return end
-            -- InsertService wraps in a Model; move children out into Camera
+            if not ok or not container then
+                pcall(function()
+                    game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
+                        Text  = "[kami] VM load failed: " .. tostring(container),
+                        Color = Color3.fromRGB(255, 80, 80),
+                    })
+                end)
+                return
+            end
             local cam = workspace.CurrentCamera
-            local inner = container:FindFirstChildOfClass("Model") or container:GetChildren()[1]
+            -- find the deepest Model with actual BaseParts
+            local function findArms(parent)
+                for _, c in ipairs(parent:GetDescendants()) do
+                    if c:IsA("Model") and c:FindFirstChildOfClass("BasePart", true) then
+                        return c
+                    end
+                end
+                return parent:FindFirstChildOfClass("Model") or parent:GetChildren()[1]
+            end
+            local inner = findArms(container)
             if inner then
                 inner.Parent = cam
                 _vmModel = inner
@@ -491900,9 +491985,22 @@ do
                 _vmModel = container
             end
             pcall(function() container:Destroy() end)
-            -- set PrimaryPart if missing
             if _vmModel and _vmModel:IsA("Model") and not _vmModel.PrimaryPart then
                 _vmModel.PrimaryPart = _vmModel:FindFirstChildOfClass("BasePart", true)
+            end
+            -- make all parts locally invisible to others but visible in first-person
+            if _vmModel then
+                for _, p in ipairs(_vmModel:GetDescendants()) do
+                    if p:IsA("BasePart") then
+                        p.CastShadow = false
+                    end
+                end
+                pcall(function()
+                    game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
+                        Text  = "[kami] VM loaded: " .. (_vmModel.Name or "?"),
+                        Color = Color3.fromRGB(100, 255, 100),
+                    })
+                end)
             end
         end)
     end
@@ -491939,8 +492037,31 @@ do
 
     local function _isDeflecting(char)
         if not char then return false end
+        -- check Instance attributes
+        local ok1, v1 = pcall(function() return char:GetAttribute("IsDeflecting") end)
+        if ok1 and v1 then return true end
+        local ok2, v2 = pcall(function() return char:GetAttribute("Deflecting") end)
+        if ok2 and v2 then return true end
+        local ok3, v3 = pcall(function() return char:GetAttribute("Parrying") end)
+        if ok3 and v3 then return true end
+        -- check BoolValues/StringValues with deflect names anywhere in char
         for _, d in ipairs(char:GetDescendants()) do
-            if d.Name:lower():find("deflect") and d:IsA("BoolValue") and d.Value then return true end
+            local dn = d.Name:lower()
+            if (dn:find("deflect") or dn:find("parry") or dn:find("block")) then
+                if d:IsA("BoolValue") and d.Value then return true end
+                if d:IsA("StringValue") and d.Value ~= "" then return true end
+            end
+        end
+        -- check active animation tracks for deflect/parry animation
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            local animator = hum:FindFirstChildOfClass("Animator")
+            if animator then
+                for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                    local n = track.Name:lower()
+                    if n:find("deflect") or n:find("parry") or n:find("block") then return true end
+                end
+            end
         end
         return false
     end
@@ -492095,11 +492216,14 @@ do
 
         -- re-patch PlayerGui stat panels every ~0.75s
         _spoofGuiFrame = _spoofGuiFrame + 1
-        if _spoofGuiFrame % 45 == 0 and (_ext["spoof_rank"] or _ext["spoof_level"] or _ext["spoof_streak"]) then
-            for _, gui in ipairs(_LP.PlayerGui:GetChildren()) do
-                pcall(function() _patchGuiStats(gui) end)
+        if _spoofGuiFrame % 45 == 0 then
+            if _ext["spoof_rank"] or _ext["spoof_level"] or _ext["spoof_streak"] then
+                _patchAllGuis()
             end
         end
+
+        -- overhead spoofed stat display
+        pcall(_updateOverhead)
     end)
 
     -- rank badge + deflecting ESP drawings + FOV gradient
