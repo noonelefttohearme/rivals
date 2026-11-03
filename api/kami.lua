@@ -491271,7 +491271,41 @@ end)
     UI.addSlider(spoofSec, "Win Streak Value",  0, 999,  25,  false, function(v) _ext["spoof_streak_val"] = v; _applySpoof() end)
 
     local appearSec = UI.createSection(miscTabObj, "Appearance", "right")
-    UI.addToggle(appearSec, "Headless",   false, function(v) _ext["headless_on"] = v end)
+    UI.addToggle(appearSec, "Headless",   false, function(v)
+        _ext["headless_on"] = v
+        local char = _LP and _LP.Character
+        if not char then return end
+        local want = v and 1 or 0
+        local head = char:FindFirstChild("Head")
+        if head then
+            head.LocalTransparencyModifier = want
+            for _, d in ipairs(head:GetDescendants()) do
+                if d:IsA("Decal") or d:IsA("Texture") then pcall(function() d.Transparency = want end) end
+            end
+        end
+        for _, acc in ipairs(char:GetChildren()) do
+            if acc:IsA("Accessory") then
+                local handle = acc:FindFirstChild("Handle")
+                if handle then
+                    local onHead = false
+                    for _, w in ipairs(handle:GetChildren()) do
+                        if (w:IsA("WeldConstraint") or w:IsA("Weld") or w:IsA("Motor6D")) then
+                            if w.Part0 == head or w.Part1 == head then onHead = true; break end
+                        end
+                    end
+                    if not onHead then
+                        for _, att in ipairs(handle:GetChildren()) do
+                            if att:IsA("Attachment") then
+                                local n = att.Name:lower()
+                                if n:find("hat") or n:find("hair") or n:find("face") or n:find("head") then onHead=true; break end
+                            end
+                        end
+                    end
+                    if onHead then handle.LocalTransparencyModifier = want end
+                end
+            end
+        end
+    end)
     UI.addToggle(appearSec, "VM Hands",   false, function(v)
         _ext["jett_hands"] = v
         if v then _vmLoad() else _vmDestroy() end
@@ -491998,29 +492032,44 @@ do
             end
         end
 
-        -- headless (client-side)
+        -- headless (client-side) — LocalTransparencyModifier is local-only, server can't override it
         if char then
+            local want = _ext["headless_on"] and 1 or 0
             local head = char:FindFirstChild("Head")
             if head then
-                local want = _ext["headless_on"] and 1 or 0
-                if head.Transparency ~= want then
-                    head.Transparency = want
-                    local face = head:FindFirstChildOfClass("Decal")
-                    if face then face.Transparency = want end
+                head.LocalTransparencyModifier = want
+                -- hide face decal + any textures inside head
+                for _, d in ipairs(head:GetDescendants()) do
+                    if d:IsA("Decal") or d:IsA("Texture") then
+                        pcall(function() d.Transparency = want end)
+                    end
                 end
             end
-            -- head accessories
-            for _, obj in ipairs(char:GetChildren()) do
-                if obj:IsA("Accessory") then
-                    local handle = obj:FindFirstChild("Handle")
+            -- hide accessories attached to head
+            for _, acc in ipairs(char:GetChildren()) do
+                if acc:IsA("Accessory") then
+                    local handle = acc:FindFirstChild("Handle")
                     if handle then
-                        local isHead = handle:FindFirstChild("HatAttachment")
-                            or handle:FindFirstChild("FaceFrontAttachment")
-                            or handle:FindFirstChild("FaceCenterAttachment")
-                            or handle:FindFirstChild("HairAttachment")
-                        if isHead then
-                            local want2 = _ext["headless_on"] and 1 or 0
-                            if handle.Transparency ~= want2 then handle.Transparency = want2 end
+                        -- check weld to head
+                        local onHead = false
+                        for _, w in ipairs(handle:GetChildren()) do
+                            if (w:IsA("WeldConstraint") or w:IsA("Weld") or w:IsA("Motor6D")) then
+                                if w.Part0 == head or w.Part1 == head then onHead = true; break end
+                            end
+                        end
+                        -- also check attachment names
+                        if not onHead then
+                            for _, att in ipairs(handle:GetChildren()) do
+                                if att:IsA("Attachment") then
+                                    local n = att.Name:lower()
+                                    if n:find("hat") or n:find("hair") or n:find("face") or n:find("head") then
+                                        onHead = true; break
+                                    end
+                                end
+                            end
+                        end
+                        if onHead then
+                            handle.LocalTransparencyModifier = want
                         end
                     end
                 end
