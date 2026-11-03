@@ -491212,63 +491212,41 @@ end)
     UI.addColorPicker(lightExtSec, "Ambient Color",   Color3.fromRGB(127,127,127), function(v) _ext["ambient_color"]         = v end)
     UI.addColorPicker(lightExtSec, "Outdoor Ambient", Color3.fromRGB(127,127,127), function(v) _ext["ambient_outdoor_color"] = v end)
 
-    local _RIVALS_RANKS = {
-        "Unranked",
-        "Iron I","Iron II","Iron III",
-        "Bronze I","Bronze II","Bronze III",
-        "Silver I","Silver II","Silver III",
-        "Gold I","Gold II","Gold III",
-        "Platinum I","Platinum II","Platinum III",
-        "Diamond I","Diamond II","Diamond III",
-        "Ascendant I","Ascendant II","Ascendant III",
-        "Immortal I","Immortal II","Immortal III",
-        "Radiant",
-    }
-    local _RANK_MMR = {
-        ["Unranked"]=0,
-        ["Iron I"]=100,["Iron II"]=200,["Iron III"]=300,
-        ["Bronze I"]=400,["Bronze II"]=500,["Bronze III"]=600,
-        ["Silver I"]=700,["Silver II"]=800,["Silver III"]=900,
-        ["Gold I"]=1000,["Gold II"]=1100,["Gold III"]=1200,
-        ["Platinum I"]=1300,["Platinum II"]=1400,["Platinum III"]=1500,
-        ["Diamond I"]=1600,["Diamond II"]=1700,["Diamond III"]=1800,
-        ["Ascendant I"]=1900,["Ascendant II"]=2000,["Ascendant III"]=2100,
-        ["Immortal I"]=2200,["Immortal II"]=2300,["Immortal III"]=2400,
-        ["Radiant"]=2500,
-    }
-
-    -- immediate leaderstats write helper (used by toggles + sliders)
+    -- spoof: use Players.LocalPlayer directly — _LP isn't in scope here
     local function _applySpoof()
-        local lead = _LP:FindFirstChild("leaderstats")
+        local lp   = Players.LocalPlayer
+        local lead = lp and lp:FindFirstChild("leaderstats")
         if not lead then return end
         for _, v in ipairs(lead:GetChildren()) do
-            local n = v.Name:lower():gsub("%s+","")
-            if _ext["spoof_rank"] and (n=="rank" or n=="ranked" or n=="elo" or n=="rating" or n=="mmr" or n=="sr") then
-                pcall(function()
-                    if type(v.Value)=="string" then v.Value = _ext["spoof_rank_str"] or "Gold II"
-                    else v.Value = _ext["spoof_rank_mmr"] or 1100 end
-                end)
+            local n = v.Name:lower():gsub("[%s_%-]+","")
+            -- try every stat regardless of name — set by type match
+            if _ext["spoof_rank"] then
+                if n:find("rank") or n:find("elo") or n:find("rating") or n:find("mmr") or n:find("sr") or n:find("score") then
+                    pcall(function()
+                        v.Value = _ext["spoof_rank_val"] or 1000
+                    end)
+                end
             end
-            if _ext["spoof_level"] and (n=="level" or n=="lvl" or n=="xp" or n=="prestige") then
-                pcall(function() v.Value = _ext["spoof_level_val"] or 50 end)
+            if _ext["spoof_level"] then
+                if n:find("level") or n:find("lvl") or n:find("xp") or n:find("prestige") then
+                    pcall(function() v.Value = _ext["spoof_level_val"] or 50 end)
+                end
             end
-            if _ext["spoof_streak"] and (n=="winstreak" or n=="streak" or n=="wins" or n=="wstreak") then
-                pcall(function() v.Value = _ext["spoof_streak_val"] or 25 end)
+            if _ext["spoof_streak"] then
+                if n:find("streak") or n:find("wins") or n:find("wstreak") or n:find("combo") then
+                    pcall(function() v.Value = _ext["spoof_streak_val"] or 25 end)
+                end
             end
         end
     end
 
     local spoofSec = UI.createSection(miscTabObj, "Spoof", "left")
-    UI.addToggle(spoofSec, "Spoof Rank",       false, function(v) _ext["spoof_rank"]     = v; _applySpoof() end)
-    UI.addDropdown(spoofSec, "Rank", _RIVALS_RANKS, "Gold II", function(v)
-        _ext["spoof_rank_str"] = v
-        _ext["spoof_rank_mmr"] = _RANK_MMR[v] or 1100
-        _applySpoof()
-    end)
-    UI.addToggle(spoofSec, "Spoof Level",      false, function(v) _ext["spoof_level"]    = v; _applySpoof() end)
-    UI.addSlider(spoofSec, "Level Value",       1, 999,  50,  false, function(v) _ext["spoof_level_val"]  = v; _applySpoof() end)
-    UI.addToggle(spoofSec, "Spoof Win Streak", false, function(v) _ext["spoof_streak"]   = v; _applySpoof() end)
-    UI.addSlider(spoofSec, "Win Streak Value",  0, 999,  25,  false, function(v) _ext["spoof_streak_val"] = v; _applySpoof() end)
+    UI.addToggle(spoofSec, "Spoof Rank",       false, function(v) _ext["spoof_rank"]       = v; _applySpoof() end)
+    UI.addSlider(spoofSec, "Rank (ELO)",        0, 9999, 1000, false, function(v) _ext["spoof_rank_val"]   = v; _applySpoof() end)
+    UI.addToggle(spoofSec, "Spoof Level",      false, function(v) _ext["spoof_level"]      = v; _applySpoof() end)
+    UI.addSlider(spoofSec, "Level Value",       1, 999,   50,  false, function(v) _ext["spoof_level_val"]  = v; _applySpoof() end)
+    UI.addToggle(spoofSec, "Spoof Win Streak", false, function(v) _ext["spoof_streak"]     = v; _applySpoof() end)
+    UI.addSlider(spoofSec, "Win Streak Value",  0, 999,   25,  false, function(v) _ext["spoof_streak_val"] = v; _applySpoof() end)
 
     local appearSec = UI.createSection(miscTabObj, "Appearance", "right")
     UI.addToggle(appearSec, "Headless",   false, function(v)
@@ -492009,23 +491987,19 @@ do
             end)
         end
 
-        -- leaderstats spoof
+        -- leaderstats spoof (continuous enforcer)
         if _ext["spoof_rank"] or _ext["spoof_level"] or _ext["spoof_streak"] then
             local lead = _LP:FindFirstChild("leaderstats")
             if lead then
                 for _, v in ipairs(lead:GetChildren()) do
-                    local n = v.Name:lower():gsub("%s+","")
-                    if _ext["spoof_rank"] and (n=="rank" or n=="ranked" or n=="elo" or n=="rating") then
-                        pcall(function()
-                            if type(v.Value) == "string" then
-                                v.Value = _ext["spoof_rank_str"] or "Gold II"
-                            else
-                                v.Value = _ext["spoof_rank_mmr"] or 1100
-                            end
-                        end)
-                    elseif _ext["spoof_level"] and (n=="level" or n=="lvl" or n=="xp") then
+                    local n = v.Name:lower():gsub("[%s_%-]+","")
+                    if _ext["spoof_rank"] and (n:find("rank") or n:find("elo") or n:find("rating") or n:find("mmr") or n:find("sr") or n:find("score")) then
+                        pcall(function() v.Value = _ext["spoof_rank_val"] or 1000 end)
+                    end
+                    if _ext["spoof_level"] and (n:find("level") or n:find("lvl") or n:find("xp") or n:find("prestige")) then
                         pcall(function() v.Value = _ext["spoof_level_val"] or 50 end)
-                    elseif _ext["spoof_streak"] and (n=="winstreak" or n=="streak" or n=="wins") then
+                    end
+                    if _ext["spoof_streak"] and (n:find("streak") or n:find("wins") or n:find("wstreak") or n:find("combo")) then
                         pcall(function() v.Value = _ext["spoof_streak_val"] or 25 end)
                     end
                 end
