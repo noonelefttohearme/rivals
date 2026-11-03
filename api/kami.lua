@@ -491258,9 +491258,66 @@ end)
     UI.addToggle(spoofSec, "Spoof Rank",       false, function(v) _ext["spoof_rank"]       = v; _applySpoof() end)
     UI.addSlider(spoofSec, "Rank (ELO)",        0, 9999, 1000, false, function(v) _ext["spoof_rank_val"]   = v; _applySpoof() end)
     UI.addToggle(spoofSec, "Spoof Level",      false, function(v) _ext["spoof_level"]      = v; _applySpoof() end)
-    UI.addSlider(spoofSec, "Level Value",       1, 999,   50,  false, function(v) _ext["spoof_level_val"]  = v; _applySpoof() end)
-    UI.addToggle(spoofSec, "Spoof Win Streak", false, function(v) _ext["spoof_streak"]     = v; _applySpoof() end)
-    UI.addSlider(spoofSec, "Win Streak Value",  0, 999,   25,  false, function(v) _ext["spoof_streak_val"] = v; _applySpoof() end)
+    local _levelSlider  = UI.addSlider(spoofSec, "Level Value",      1, 999,  50, false, function(v) _ext["spoof_level_val"]  = v; _applySpoof() end)
+    UI.addToggle(spoofSec, "Spoof Win Streak", false, function(v) _ext["spoof_streak"] = v; _applySpoof() end)
+    local _streakSlider = UI.addSlider(spoofSec, "Win Streak Value", 0, 999,  25, false, function(v) _ext["spoof_streak_val"] = v; _applySpoof() end)
+
+    -- auto-detect real level + streak 4s after load and preset sliders to match
+    task.delay(4, function()
+        local lp = Players.LocalPlayer
+        if not lp then return end
+        local function scanStat(kws)
+            for _, child in ipairs(lp:GetChildren()) do
+                if child:IsA("IntValue") or child:IsA("NumberValue") then
+                    local n = child.Name:lower():gsub("[%s_%-]+","")
+                    for _, k in ipairs(kws) do if n:find(k) then return tonumber(child.Value) end end
+                elseif not child:IsA("LocalScript") and not child:IsA("Script") then
+                    for _, v in ipairs(child:GetChildren()) do
+                        if v:IsA("IntValue") or v:IsA("NumberValue") then
+                            local n = v.Name:lower():gsub("[%s_%-]+","")
+                            for _, k in ipairs(kws) do if n:find(k) then return tonumber(v.Value) end end
+                        end
+                    end
+                end
+            end
+            return nil
+        end
+        local function guiScanStat(kws)
+            for _, gui in ipairs(lp.PlayerGui:GetChildren()) do
+                if gui:IsA("ScreenGui") and gui.Enabled then
+                    for _, d in ipairs(gui:GetDescendants()) do
+                        if d:IsA("TextLabel") then
+                            local num = tonumber(d.Text)
+                            if num and num > 0 then
+                                local ctx = d.Name:lower()
+                                local par = d.Parent
+                                if par then
+                                    ctx = ctx .. " " .. par.Name:lower()
+                                    for _, s in ipairs(par:GetChildren()) do
+                                        ctx = ctx .. " " .. s.Name:lower()
+                                        if s:IsA("TextLabel") and s ~= d then ctx = ctx .. " " .. s.Text:lower() end
+                                    end
+                                    if par.Parent then ctx = ctx .. " " .. par.Parent.Name:lower() end
+                                end
+                                for _, k in ipairs(kws) do if ctx:find(k) then return num end end
+                            end
+                        end
+                    end
+                end
+            end
+            return nil
+        end
+        local realLevel  = scanStat({"level","lvl","xp","prestige"})  or guiScanStat({"level","lvl","prestige"})
+        local realStreak = scanStat({"streak","wstreak","combo"})       or guiScanStat({"streak"})
+        if realLevel and realLevel > 0 and realLevel < 10000 then
+            _ext["spoof_level_val"]  = realLevel
+            _levelSlider.setValue(realLevel)
+        end
+        if realStreak and realStreak > 0 and realStreak < 10000 then
+            _ext["spoof_streak_val"] = realStreak
+            _streakSlider.setValue(realStreak)
+        end
+    end)
 
     local appearSec = UI.createSection(miscTabObj, "Appearance", "right")
     UI.addToggle(appearSec, "Headless",   false, function(v)
@@ -492214,9 +492271,9 @@ do
             end
         end
 
-        -- re-patch PlayerGui stat panels every ~0.75s
+        -- re-patch PlayerGui stat panels every ~10 frames (~6x/sec) so server refreshes are overwritten
         _spoofGuiFrame = _spoofGuiFrame + 1
-        if _spoofGuiFrame % 45 == 0 then
+        if _spoofGuiFrame % 10 == 0 then
             if _ext["spoof_rank"] or _ext["spoof_level"] or _ext["spoof_streak"] then
                 _patchAllGuis()
             end
