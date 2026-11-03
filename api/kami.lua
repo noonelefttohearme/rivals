@@ -490927,236 +490927,105 @@ end
 function UI.addColorPicker(container, labelText, defaultColor, callback)
     defaultColor = defaultColor or Color3.fromRGB(255, 215, 0)
     local curColor = defaultColor
-    local h, s, v = Color3.toHSV(curColor)
-    local open = false
+    local selIdx   = 1
 
-    -- outer wrapper (auto-sizes when panel expands)
+    -- UE accent palette (from built-in theme presets) + common extras
+    local SWATCHES = {
+        {Color3.fromRGB(210,170, 55), "Gold"},       -- UE default accent
+        {Color3.fromRGB(162,205,255), "Ice Blue"},    -- a2cdff
+        {Color3.fromRGB(105, 86,203), "Purple"},      -- 6956cb
+        {Color3.fromRGB(158,255,200), "Mint"},        -- 9effc8
+        {Color3.fromRGB(250,166, 20), "Amber"},       -- faa614
+        {Color3.fromRGB(  1,163,241), "Cyan"},        -- 01a3f1
+        {Color3.fromRGB(196,  7,189), "Magenta"},     -- c707bd
+        {Color3.fromRGB(205, 24,120), "Crimson"},     -- ca0756
+        {Color3.fromRGB( 89, 69,255), "Indigo"},      -- 5945ff
+        {Color3.fromRGB(129,255, 84), "Lime"},        -- 81ff54
+        {Color3.fromRGB(215,166,176), "Blush"},       -- d7a6b0
+        {Color3.fromRGB(205, 24, 24), "Red"},         -- cd1818
+        {Color3.fromRGB(255,255,255), "White"},
+        {Color3.fromRGB(180,180,180), "Silver"},
+    }
+
+    -- find closest preset to defaultColor
+    local function setByColor(c)
+        for i, sw in ipairs(SWATCHES) do
+            if sw[1] == c then selIdx = i; return end
+        end
+    end
+    setByColor(defaultColor)
+
+    -- fixed-height wrapper: 26px header + 20px swatch row = 46px total
     local wrapper = Instance.new("Frame")
     wrapper.Name = "CP_" .. labelText
-    wrapper.Size = UDim2.new(1, 0, 0, 26)
+    wrapper.Size = UDim2.new(1, 0, 0, 46)
     wrapper.BackgroundTransparency = 1
-    wrapper.ClipsDescendants = false
     wrapper.Parent = container
 
-    -- header row
-    local header = Instance.new("Frame")
-    header.Size = UDim2.new(1, 0, 0, 26)
-    header.BackgroundTransparency = 1
-    header.Parent = wrapper
-
+    -- label
     local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(0.58, 0, 1, 0)
+    lbl.Size = UDim2.new(1, 0, 0, 18)
     lbl.BackgroundTransparency = 1
     lbl.Text = labelText
     if UI_FONT then pcall(function() lbl.FontFace = UI_FONT end) end
     lbl.TextSize = 11
-    lbl.TextColor3 = COLORS.TextPrimary
+    lbl.TextColor3 = COLORS.TextMuted
     lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Parent = header
+    lbl.Parent = wrapper
 
-    -- swatch + hex display
-    local swatchBtn = Instance.new("TextButton")
-    swatchBtn.Size = UDim2.new(0.40, 0, 0.78, 0)
-    swatchBtn.Position = UDim2.new(0.59, 0, 0.11, 0)
-    swatchBtn.BackgroundColor3 = curColor
-    swatchBtn.Text = ""
-    swatchBtn.BorderSizePixel = 0
-    swatchBtn.Parent = header
-    local swatchStroke = Instance.new("UIStroke")
-    swatchStroke.Color = COLORS.PanelBorder
-    swatchStroke.Thickness = 1
-    swatchStroke.Parent = swatchBtn
-    local hexLbl = Instance.new("TextLabel")
-    hexLbl.Size = UDim2.new(1, 0, 1, 0)
-    hexLbl.BackgroundTransparency = 1
-    local function toHex(c)
-        return string.format("#%02X%02X%02X",
-            math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255))
-    end
-    hexLbl.Text = toHex(curColor)
-    if UI_FONT then pcall(function() hexLbl.FontFace = UI_FONT end) end
-    hexLbl.TextSize = 9
-    hexLbl.TextColor3 = Color3.fromRGB(255,255,255)
-    hexLbl.Parent = swatchBtn
+    -- swatch strip
+    local strip = Instance.new("Frame")
+    strip.Size = UDim2.new(1, 0, 0, 20)
+    strip.Position = UDim2.new(0, 0, 0, 20)
+    strip.BackgroundTransparency = 1
+    strip.Parent = wrapper
 
-    -- collapsed panel (hidden by default)
-    local panel = Instance.new("Frame")
-    panel.Name = "CPPanel"
-    panel.Size = UDim2.new(1, 0, 0, 90)
-    panel.Position = UDim2.new(0, 0, 0, 26)
-    panel.BackgroundColor3 = COLORS.PanelBg
-    panel.BorderSizePixel = 0
-    panel.Visible = false
-    panel.ZIndex = 8
-    panel.Parent = wrapper
-    local panelStroke = Instance.new("UIStroke")
-    panelStroke.Color = COLORS.PanelBorder
-    panelStroke.Thickness = 1
-    panelStroke.Parent = panel
-    local panelPad = Instance.new("UIPadding")
-    panelPad.PaddingLeft  = UDim.new(0, 6)
-    panelPad.PaddingRight = UDim.new(0, 6)
-    panelPad.PaddingTop   = UDim.new(0, 4)
-    panelPad.PaddingBottom = UDim.new(0, 4)
-    panelPad.Parent = panel
+    local _selStroke = nil  -- track border on selected swatch
 
-    local function makeSliderRow(parent, labelStr, yPos, initVal)
-        local f = Instance.new("Frame")
-        f.Size = UDim2.new(1, 0, 0, 20)
-        f.Position = UDim2.new(0, 0, 0, yPos)
-        f.BackgroundTransparency = 1
-        f.Parent = parent
-
-        local slbl = Instance.new("TextLabel")
-        slbl.Size = UDim2.new(0.06, 0, 1, 0)
-        slbl.BackgroundTransparency = 1
-        slbl.Text = labelStr
-        if UI_FONT then pcall(function() slbl.FontFace = UI_FONT end) end
-        slbl.TextSize = 9
-        slbl.TextColor3 = COLORS.TextMuted
-        slbl.ZIndex = 9
-        slbl.Parent = f
-
-        local track = Instance.new("Frame")
-        track.Size = UDim2.new(0.70, 0, 0, 4)
-        track.Position = UDim2.new(0.08, 0, 0.5, -2)
-        track.BackgroundColor3 = COLORS.CheckboxBg
-        track.BorderSizePixel = 0
-        track.ZIndex = 9
-        track.Parent = f
-        local trackStroke = Instance.new("UIStroke")
-        trackStroke.Color = COLORS.DropdownBorder
-        trackStroke.Thickness = 1
-        trackStroke.Parent = track
-
-        local fill = Instance.new("Frame")
-        fill.Size = UDim2.new(initVal/255, 0, 1, 0)
-        fill.BackgroundColor3 = COLORS.Accent
-        fill.BorderSizePixel = 0
-        fill.ZIndex = 10
-        fill.Parent = track
-
-        local thumb = Instance.new("TextButton")
-        thumb.Size = UDim2.new(0, 10, 0, 10)
-        thumb.Position = UDim2.new(initVal/255, -5, 0.5, -5)
-        thumb.BackgroundColor3 = COLORS.AccentGlow
-        thumb.Text = ""
-        thumb.BorderSizePixel = 0
-        thumb.ZIndex = 11
-        thumb.Parent = track
-
-        local numLbl = Instance.new("TextLabel")
-        numLbl.Size = UDim2.new(0.16, 0, 1, 0)
-        numLbl.Position = UDim2.new(0.81, 0, 0, 0)
-        numLbl.BackgroundTransparency = 1
-        numLbl.Text = tostring(initVal)
-        if UI_FONT then pcall(function() numLbl.FontFace = UI_FONT end) end
-        numLbl.TextSize = 9
-        numLbl.TextColor3 = COLORS.TextPrimary
-        numLbl.ZIndex = 9
-        numLbl.Parent = f
-
-        local val = initVal
-        local dragging = false
-        local function updateFromX(absX)
-            local tAbs = track.AbsolutePosition.X
-            local tW   = track.AbsoluteSize.X
-            local ratio = math.clamp((absX - tAbs) / tW, 0, 1)
-            val = math.floor(ratio * 255)
-            fill.Size = UDim2.new(ratio, 0, 1, 0)
-            thumb.Position = UDim2.new(ratio, -5, 0.5, -5)
-            numLbl.Text = tostring(val)
-            return val
-        end
-
-        thumb.MouseButton1Down:Connect(function() dragging = true end)
-        track.MouseButton1Down:Connect(function()
-            dragging = true
-            updateFromX(game:GetService("UserInputService"):GetMouseLocation().X)
-        end)
-        game:GetService("UserInputService").InputChanged:Connect(function(inp)
-            if dragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
-                updateFromX(inp.Position.X)
-            end
-        end)
-        game:GetService("UserInputService").InputEnded:Connect(function(inp)
-            if inp.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-        end)
-
-        return { getVal = function() return val end, thumb = thumb, fill = fill, numLbl = numLbl }
-    end
-
-    local rSlider = makeSliderRow(panel, "R", 0,  math.floor(curColor.R*255))
-    local gSlider = makeSliderRow(panel, "G", 22, math.floor(curColor.G*255))
-    local bSlider = makeSliderRow(panel, "B", 44, math.floor(curColor.B*255))
-
-    -- presets row
-    local presetsRow = Instance.new("Frame")
-    presetsRow.Size = UDim2.new(1, 0, 0, 14)
-    presetsRow.Position = UDim2.new(0, 0, 0, 68)
-    presetsRow.BackgroundTransparency = 1
-    presetsRow.Parent = panel
-    local presetColors = {
-        Color3.fromRGB(255,215,0), Color3.fromRGB(255,80,80),
-        Color3.fromRGB(80,180,255), Color3.fromRGB(80,255,120),
-        Color3.fromRGB(200,80,255), Color3.fromRGB(255,140,0),
-        Color3.fromRGB(255,255,255), Color3.fromRGB(160,160,160),
-    }
-    for i, pc in ipairs(presetColors) do
+    for i, sw in ipairs(SWATCHES) do
         local dot = Instance.new("TextButton")
-        dot.Size = UDim2.new(0, 12, 0, 12)
-        dot.Position = UDim2.new(0, (i-1)*15, 0, 1)
-        dot.BackgroundColor3 = pc
+        dot.Size = UDim2.new(0, 14, 0, 14)
+        dot.Position = UDim2.new(0, (i-1)*16, 0, 2)
+        dot.BackgroundColor3 = sw[1]
         dot.Text = ""
         dot.BorderSizePixel = 0
-        dot.ZIndex = 9
-        dot.Parent = presetsRow
-        local dotStroke = Instance.new("UIStroke")
-        dotStroke.Color = COLORS.PanelBorder
-        dotStroke.Thickness = 1
-        dotStroke.Parent = dot
+        dot.ZIndex = 6
+        dot.Parent = strip
+
+        local st = Instance.new("UIStroke")
+        st.Color = (i == selIdx) and COLORS.AccentGlow or Color3.fromRGB(40,40,40)
+        st.Thickness = (i == selIdx) and 1.5 or 1
+        st.Parent = dot
+        if i == selIdx then _selStroke = st end
+
+        dot.MouseEnter:Connect(function()
+            if st ~= _selStroke then
+                tween(dot, {BackgroundColor3 = sw[1]:Lerp(Color3.fromRGB(255,255,255), 0.25)}, 0.1)
+            end
+        end)
+        dot.MouseLeave:Connect(function()
+            if st ~= _selStroke then
+                tween(dot, {BackgroundColor3 = sw[1]}, 0.1)
+            end
+        end)
+
         dot.MouseButton1Click:Connect(function()
-            curColor = pc
-            rSlider.fill.Size = UDim2.new(pc.R, 0, 1, 0)
-            rSlider.thumb.Position = UDim2.new(pc.R, -5, 0.5, -5)
-            rSlider.numLbl.Text = tostring(math.floor(pc.R*255))
-            gSlider.fill.Size = UDim2.new(pc.G, 0, 1, 0)
-            gSlider.thumb.Position = UDim2.new(pc.G, -5, 0.5, -5)
-            gSlider.numLbl.Text = tostring(math.floor(pc.G*255))
-            bSlider.fill.Size = UDim2.new(pc.B, 0, 1, 0)
-            bSlider.thumb.Position = UDim2.new(pc.B, -5, 0.5, -5)
-            bSlider.numLbl.Text = tostring(math.floor(pc.B*255))
-            swatchBtn.BackgroundColor3 = pc
-            hexLbl.Text = toHex(pc)
-            if callback then callback(pc) end
+            -- clear old selection border
+            if _selStroke then
+                _selStroke.Color = Color3.fromRGB(40,40,40)
+                _selStroke.Thickness = 1
+            end
+            selIdx = i
+            curColor = sw[1]
+            st.Color = COLORS.AccentGlow
+            st.Thickness = 1.5
+            _selStroke = st
+            if callback then callback(curColor) end
         end)
     end
 
-    -- live update from RGB sliders
-    local function onSliderChange()
-        curColor = Color3.fromRGB(rSlider.getVal(), gSlider.getVal(), bSlider.getVal())
-        swatchBtn.BackgroundColor3 = curColor
-        hexLbl.Text = toHex(curColor)
-        if callback then callback(curColor) end
-    end
-
-    local UIS2 = game:GetService("UserInputService")
-    UIS2.InputChanged:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.MouseMovement then
-            onSliderChange()
-        end
-    end)
-
-    -- toggle open/close
-    swatchBtn.MouseButton1Click:Connect(function()
-        open = not open
-        panel.Visible = open
-        wrapper.Size = open and UDim2.new(1, 0, 0, 116) or UDim2.new(1, 0, 0, 26)
-        swatchStroke.Color = open and COLORS.AccentGlow or COLORS.PanelBorder
-    end)
-
-    if callback then callback(curColor) end
-    return swatchBtn
+    if callback then callback(defaultColor) end
+    return wrapper
 end
 
 local FONT_APPLIED = {}
