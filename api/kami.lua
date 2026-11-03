@@ -491213,28 +491213,30 @@ end)
     UI.addColorPicker(lightExtSec, "Outdoor Ambient", Color3.fromRGB(127,127,127), function(v) _ext["ambient_outdoor_color"] = v end)
 
     -- spoof: use Players.LocalPlayer directly — _LP isn't in scope here
+    local function _tryWriteStat(v)
+        local n = v.Name:lower():gsub("[%s_%-]+","")
+        if _ext["spoof_rank"] and (n:find("rank") or n:find("elo") or n:find("rating") or n:find("mmr") or n:find("sr") or n:find("score")) then
+            pcall(function() v.Value = _ext["spoof_rank_val"] or 1000 end)
+        end
+        if _ext["spoof_level"] and (n:find("level") or n:find("lvl") or n:find("xp") or n:find("prestige")) then
+            pcall(function() v.Value = _ext["spoof_level_val"] or 50 end)
+        end
+        if _ext["spoof_streak"] and (n:find("streak") or n:find("wins") or n:find("wstreak") or n:find("combo")) then
+            pcall(function() v.Value = _ext["spoof_streak_val"] or 25 end)
+        end
+    end
     local function _applySpoof()
-        local lp   = Players.LocalPlayer
-        local lead = lp and lp:FindFirstChild("leaderstats")
-        if not lead then return end
-        for _, v in ipairs(lead:GetChildren()) do
-            local n = v.Name:lower():gsub("[%s_%-]+","")
-            -- try every stat regardless of name — set by type match
-            if _ext["spoof_rank"] then
-                if n:find("rank") or n:find("elo") or n:find("rating") or n:find("mmr") or n:find("sr") or n:find("score") then
-                    pcall(function()
-                        v.Value = _ext["spoof_rank_val"] or 1000
-                    end)
-                end
-            end
-            if _ext["spoof_level"] then
-                if n:find("level") or n:find("lvl") or n:find("xp") or n:find("prestige") then
-                    pcall(function() v.Value = _ext["spoof_level_val"] or 50 end)
-                end
-            end
-            if _ext["spoof_streak"] then
-                if n:find("streak") or n:find("wins") or n:find("wstreak") or n:find("combo") then
-                    pcall(function() v.Value = _ext["spoof_streak_val"] or 25 end)
+        local lp = Players.LocalPlayer
+        if not lp then return end
+        -- scan leaderstats AND every direct child folder (Rivals may use different container name)
+        for _, child in ipairs(lp:GetChildren()) do
+            if child:IsA("IntValue") or child:IsA("NumberValue") or child:IsA("StringValue") then
+                _tryWriteStat(child)
+            elseif not child:IsA("LocalScript") and not child:IsA("Script") then
+                for _, v in ipairs(child:GetChildren()) do
+                    if v:IsA("IntValue") or v:IsA("NumberValue") or v:IsA("StringValue") then
+                        _tryWriteStat(v)
+                    end
                 end
             end
         end
@@ -491808,22 +491810,69 @@ do
     -- track enemy HP to detect damage (polled every Heartbeat — more reliable than HealthChanged in Rivals)
     local _lastHP = {}
     local _dmgCooldown = {}
+    local _spoofGuiFrame = 0
 
-    -- dump real leaderstats keys to chat once (so we know exact names)
-    task.delay(5, function()
-        local lead = _LP:FindFirstChild("leaderstats")
-        if lead then
-            local parts = {}
-            for _, v in ipairs(lead:GetChildren()) do
-                parts[#parts+1] = v.Name .. "(" .. v.ClassName .. ")=" .. tostring(v.Value)
+    -- GUI-layer spoof: patch any profile/stat panel that opens in PlayerGui
+    local function _patchGuiStats(root)
+        if not (_ext["spoof_rank"] or _ext["spoof_level"] or _ext["spoof_streak"]) then return end
+        for _, d in ipairs(root:GetDescendants()) do
+            if d:IsA("TextLabel") or d:IsA("TextBox") then
+                -- build context from element name + sibling names/text
+                local ctx = d.Name:lower()
+                local par = d.Parent
+                if par then
+                    for _, s in ipairs(par:GetChildren()) do
+                        ctx = ctx .. " " .. s.Name:lower()
+                        if s:IsA("TextLabel") and s ~= d then ctx = ctx .. " " .. s.Text:lower() end
+                    end
+                end
+                local raw = d.Text:match("^%s*([%d,%.]+)%s*$")
+                if raw then
+                    if _ext["spoof_rank"] and (ctx:find("rank") or ctx:find("elo") or ctx:find("rating") or ctx:find("mmr") or ctx:find("score")) then
+                        pcall(function() d.Text = tostring(_ext["spoof_rank_val"] or 1000) end)
+                    elseif _ext["spoof_level"] and (ctx:find("level") or ctx:find("lvl") or ctx:find("xp") or ctx:find("prestige")) then
+                        pcall(function() d.Text = tostring(_ext["spoof_level_val"] or 50) end)
+                    elseif _ext["spoof_streak"] and (ctx:find("streak") or ctx:find("win") or ctx:find("combo")) then
+                        pcall(function() d.Text = tostring(_ext["spoof_streak_val"] or 25) end)
+                    end
+                end
             end
-            pcall(function()
-                game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
-                    Text  = "[kami] leaderstats: " .. (next(parts) and table.concat(parts,", ") or "none"),
-                    Color = Color3.fromRGB(255,215,0),
-                })
-            end)
         end
+    end
+
+    -- patch new GUIs the moment they appear (profile panels, leaderboards, etc.)
+    _LP.PlayerGui.ChildAdded:Connect(function(child)
+        task.wait(0.25)
+        pcall(function() _patchGuiStats(child) end)
+        task.delay(1.5, function() pcall(function() _patchGuiStats(child) end) end)
+    end)
+    -- patch anything already open
+    task.delay(4, function()
+        for _, gui in ipairs(_LP.PlayerGui:GetChildren()) do
+            pcall(function() _patchGuiStats(gui) end)
+        end
+    end)
+
+    -- dump ALL player stat containers to chat once (debug: find real key names)
+    task.delay(5, function()
+        local parts = {}
+        for _, child in ipairs(_LP:GetChildren()) do
+            if child:IsA("IntValue") or child:IsA("NumberValue") or child:IsA("StringValue") then
+                parts[#parts+1] = child.Name.."="..tostring(child.Value)
+            elseif not child:IsA("LocalScript") and not child:IsA("Script") then
+                for _, v in ipairs(child:GetChildren()) do
+                    if v:IsA("IntValue") or v:IsA("NumberValue") or v:IsA("StringValue") then
+                        parts[#parts+1] = child.Name.."."..v.Name.."="..tostring(v.Value)
+                    end
+                end
+            end
+        end
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
+                Text  = "[kami] stats: " .. (next(parts) and table.concat(parts,", ") or "NONE FOUND"),
+                Color = Color3.fromRGB(255,215,0),
+            })
+        end)
     end)
 
     -- ── viewmodel hands ──────────────────────────────────────────
@@ -491942,20 +491991,34 @@ do
             end)
         end
 
-        -- leaderstats spoof (continuous enforcer)
+        -- stat spoof enforcer: scan all player children (not just leaderstats — Rivals may use different name)
         if _ext["spoof_rank"] or _ext["spoof_level"] or _ext["spoof_streak"] then
-            local lead = _LP:FindFirstChild("leaderstats")
-            if lead then
-                for _, v in ipairs(lead:GetChildren()) do
-                    local n = v.Name:lower():gsub("[%s_%-]+","")
+            for _, child in ipairs(_LP:GetChildren()) do
+                if child:IsA("IntValue") or child:IsA("NumberValue") or child:IsA("StringValue") then
+                    local n = child.Name:lower():gsub("[%s_%-]+","")
                     if _ext["spoof_rank"] and (n:find("rank") or n:find("elo") or n:find("rating") or n:find("mmr") or n:find("sr") or n:find("score")) then
-                        pcall(function() v.Value = _ext["spoof_rank_val"] or 1000 end)
+                        pcall(function() child.Value = _ext["spoof_rank_val"] or 1000 end)
                     end
                     if _ext["spoof_level"] and (n:find("level") or n:find("lvl") or n:find("xp") or n:find("prestige")) then
-                        pcall(function() v.Value = _ext["spoof_level_val"] or 50 end)
+                        pcall(function() child.Value = _ext["spoof_level_val"] or 50 end)
                     end
                     if _ext["spoof_streak"] and (n:find("streak") or n:find("wins") or n:find("wstreak") or n:find("combo")) then
-                        pcall(function() v.Value = _ext["spoof_streak_val"] or 25 end)
+                        pcall(function() child.Value = _ext["spoof_streak_val"] or 25 end)
+                    end
+                elseif not child:IsA("LocalScript") and not child:IsA("Script") then
+                    for _, v in ipairs(child:GetChildren()) do
+                        if v:IsA("IntValue") or v:IsA("NumberValue") or v:IsA("StringValue") then
+                            local n = v.Name:lower():gsub("[%s_%-]+","")
+                            if _ext["spoof_rank"] and (n:find("rank") or n:find("elo") or n:find("rating") or n:find("mmr") or n:find("sr") or n:find("score")) then
+                                pcall(function() v.Value = _ext["spoof_rank_val"] or 1000 end)
+                            end
+                            if _ext["spoof_level"] and (n:find("level") or n:find("lvl") or n:find("xp") or n:find("prestige")) then
+                                pcall(function() v.Value = _ext["spoof_level_val"] or 50 end)
+                            end
+                            if _ext["spoof_streak"] and (n:find("streak") or n:find("wins") or n:find("wstreak") or n:find("combo")) then
+                                pcall(function() v.Value = _ext["spoof_streak_val"] or 25 end)
+                            end
+                        end
                     end
                 end
             end
@@ -492027,6 +492090,14 @@ do
             for _, n in ipairs(_ARM_NAMES) do
                 local p = char:FindFirstChild(n)
                 if p then pcall(function() p.LocalTransparencyModifier = wantHide end) end
+            end
+        end
+
+        -- re-patch PlayerGui stat panels every ~0.75s
+        _spoofGuiFrame = _spoofGuiFrame + 1
+        if _spoofGuiFrame % 45 == 0 and (_ext["spoof_rank"] or _ext["spoof_level"] or _ext["spoof_streak"]) then
+            for _, gui in ipairs(_LP.PlayerGui:GetChildren()) do
+                pcall(function() _patchGuiStats(gui) end)
             end
         end
     end)
