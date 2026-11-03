@@ -491251,12 +491251,14 @@ end)
     local appearSec = UI.createSection(miscTabObj, "Appearance", "right")
     UI.addToggle(appearSec, "Headless",   false, function(v)
         _ext["headless_on"] = v
-        local char = _LP and _LP.Character
+        local lp2  = Players.LocalPlayer
+        local char = lp2 and lp2.Character
         if not char then return end
         local want = v and 1 or 0
         local head = char:FindFirstChild("Head")
         if head then
             head.LocalTransparencyModifier = want
+            head.Transparency = want
             for _, d in ipairs(head:GetDescendants()) do
                 if d:IsA("Decal") or d:IsA("Texture") then pcall(function() d.Transparency = want end) end
             end
@@ -491264,23 +491266,7 @@ end)
         for _, acc in ipairs(char:GetChildren()) do
             if acc:IsA("Accessory") then
                 local handle = acc:FindFirstChild("Handle")
-                if handle then
-                    local onHead = false
-                    for _, w in ipairs(handle:GetChildren()) do
-                        if (w:IsA("WeldConstraint") or w:IsA("Weld") or w:IsA("Motor6D")) then
-                            if w.Part0 == head or w.Part1 == head then onHead = true; break end
-                        end
-                    end
-                    if not onHead then
-                        for _, att in ipairs(handle:GetChildren()) do
-                            if att:IsA("Attachment") then
-                                local n = att.Name:lower()
-                                if n:find("hat") or n:find("hair") or n:find("face") or n:find("head") then onHead=true; break end
-                            end
-                        end
-                    end
-                    if onHead then handle.LocalTransparencyModifier = want end
-                end
+                if handle then handle.LocalTransparencyModifier = want end
             end
         end
     end)
@@ -491793,7 +491779,7 @@ do
         bb.Size         = UDim2.new(0, 90, 0, 32)
         bb.StudsOffset  = Vector3.new((math.random()-0.5)*3, 3 + math.random()*2, 0)
         bb.Adornee      = hrp
-        bb.Parent       = workspace
+        bb.Parent       = hrp
         local lbl = Instance.new("TextLabel", bb)
         lbl.Size                  = UDim2.new(1,0,1,0)
         lbl.BackgroundTransparency= 1
@@ -491819,32 +491805,9 @@ do
         end)
     end
 
-    -- track enemy HP to detect damage
+    -- track enemy HP to detect damage (polled every Heartbeat — more reliable than HealthChanged in Rivals)
     local _lastHP = {}
-    local _charConns = {}
-    local function _watchChar(plr)
-        -- disconnect old connections for this player
-        if _charConns[plr] then
-            for _, c in ipairs(_charConns[plr]) do pcall(function() c:Disconnect() end) end
-        end
-        _charConns[plr] = {}
-        local char = plr.Character
-        if not char then return end
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not hum then return end
-        _lastHP[plr] = hum.Health
-        local c1 = hum.HealthChanged:Connect(function(newHP)
-            local oldHP = _lastHP[plr] or newHP
-            _lastHP[plr] = newHP
-            local delta = math.floor(oldHP - newHP)
-            if delta < 1 then return end
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-            local isCrit = _ext["dmg_num_crit"] and delta >= 20
-            _spawnDmgNum(hrp, delta, isCrit)
-        end)
-        table.insert(_charConns[plr], c1)
-    end
+    local _dmgCooldown = {}
 
     -- dump real leaderstats keys to chat once (so we know exact names)
     task.delay(5, function()
@@ -491861,14 +491824,6 @@ do
                 })
             end)
         end
-    end)
-
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= _LP then _watchChar(plr) end
-        plr.CharacterAdded:Connect(function() task.wait(1); _watchChar(plr) end)
-    end
-    Players.PlayerAdded:Connect(function(plr)
-        plr.CharacterAdded:Connect(function() task.wait(1); _watchChar(plr) end)
     end)
 
     -- ── viewmodel hands ──────────────────────────────────────────
@@ -492006,45 +491961,57 @@ do
             end
         end
 
-        -- headless (client-side) — LocalTransparencyModifier is local-only, server can't override it
+        -- headless — nuke head + all accessories every frame (LocalTransparencyModifier is client-only)
         if char then
             local want = _ext["headless_on"] and 1 or 0
             local head = char:FindFirstChild("Head")
             if head then
                 head.LocalTransparencyModifier = want
-                -- hide face decal + any textures inside head
+                head.Transparency = want
                 for _, d in ipairs(head:GetDescendants()) do
                     if d:IsA("Decal") or d:IsA("Texture") then
                         pcall(function() d.Transparency = want end)
                     end
                 end
             end
-            -- hide accessories attached to head
             for _, acc in ipairs(char:GetChildren()) do
                 if acc:IsA("Accessory") then
                     local handle = acc:FindFirstChild("Handle")
                     if handle then
-                        -- check weld to head
-                        local onHead = false
-                        for _, w in ipairs(handle:GetChildren()) do
-                            if (w:IsA("WeldConstraint") or w:IsA("Weld") or w:IsA("Motor6D")) then
-                                if w.Part0 == head or w.Part1 == head then onHead = true; break end
-                            end
-                        end
-                        -- also check attachment names
-                        if not onHead then
-                            for _, att in ipairs(handle:GetChildren()) do
-                                if att:IsA("Attachment") then
-                                    local n = att.Name:lower()
-                                    if n:find("hat") or n:find("hair") or n:find("face") or n:find("head") then
-                                        onHead = true; break
+                        handle.LocalTransparencyModifier = want
+                        handle.Transparency = want
+                    end
+                end
+            end
+        end
+
+        -- damage numbers: poll HP of every enemy every Heartbeat
+        if _ext["dmg_num_on"] then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= _LP then
+                    local pc = plr.Character
+                    if pc then
+                        local hum = pc:FindFirstChildOfClass("Humanoid")
+                        if hum then
+                            local curHP = hum.Health
+                            local prev  = _lastHP[plr]
+                            if prev and curHP < prev - 0.5 then
+                                local delta = math.floor(prev - curHP)
+                                if delta >= 1 and not _dmgCooldown[plr] then
+                                    local hrp = pc:FindFirstChild("HumanoidRootPart")
+                                    if hrp then
+                                        _dmgCooldown[plr] = true
+                                        _spawnDmgNum(hrp, delta, _ext["dmg_num_crit"] and delta >= 20)
+                                        task.delay(0.1, function() _dmgCooldown[plr] = nil end)
                                     end
                                 end
                             end
+                            _lastHP[plr] = curHP
+                        else
+                            _lastHP[plr] = nil
                         end
-                        if onHead then
-                            handle.LocalTransparencyModifier = want
-                        end
+                    else
+                        _lastHP[plr] = nil
                     end
                 end
             end
