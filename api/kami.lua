@@ -491743,8 +491743,6 @@ do
     local _hue = 0
 
     -- ── damage numbers system ─────────────────────────────────
-    local _dmgParticles = {}  -- { drawing, y, alpha, timer }
-
     local _fontMap = {
         ["Monocraft"]   = "rbxasset://fonts/families/RobotoMono.json",
         ["PressStart2P"]= "rbxasset://fonts/families/PressStart2P.json",
@@ -491754,53 +491752,86 @@ do
         ["Oswald"]      = "rbxasset://fonts/families/Oswald.json",
     }
 
-    local function _spawnDmgNum(screenPos, dmg, isCrit)
+    local function _spawnDmgNum(hrp, dmg, isCrit)
         if not _ext["dmg_num_on"] then return end
-        local txt = Drawing.new("Text")
-        txt.Text    = isCrit and ("!!"..tostring(dmg).."!!") or tostring(dmg)
-        txt.Size    = _ext["dmg_num_size"] or 18
-        txt.Color   = isCrit and Color3.fromRGB(255,80,80) or (_ext["dmg_num_color"] or Color3.fromRGB(255,215,0))
-        txt.Outline = (_ext["dmg_num_outline"] ~= false)
-        txt.Center  = true
-        txt.Position = Vector2.new(screenPos.X + (math.random()-0.5)*24, screenPos.Y)
-        txt.Visible = true
-        table.insert(_dmgParticles, {
-            d      = txt,
-            y      = screenPos.Y,
-            alpha  = 1,
-            timer  = 0,
-        })
+        local bb = Instance.new("BillboardGui")
+        bb.AlwaysOnTop  = true
+        bb.Size         = UDim2.new(0, 90, 0, 32)
+        bb.StudsOffset  = Vector3.new((math.random()-0.5)*3, 3 + math.random()*2, 0)
+        bb.Adornee      = hrp
+        bb.Parent       = workspace
+        local lbl = Instance.new("TextLabel", bb)
+        lbl.Size                  = UDim2.new(1,0,1,0)
+        lbl.BackgroundTransparency= 1
+        lbl.Text                  = isCrit and ("!!"..tostring(dmg).."!!") or tostring(dmg)
+        lbl.TextColor3            = isCrit and Color3.fromRGB(255,50,50) or (_ext["dmg_num_color"] or Color3.fromRGB(255,215,0))
+        lbl.TextStrokeTransparency= 0
+        lbl.TextStrokeColor3      = Color3.new(0,0,0)
+        lbl.Font                  = Enum.Font.GothamBold
+        lbl.TextSize              = _ext["dmg_num_size"] or 18
+        local startOff = bb.StudsOffset
+        local fade = _ext["dmg_num_fade"] or 1
+        local spd  = (_ext["dmg_num_speed"] or 4) * 2
+        local t0 = tick()
+        task.spawn(function()
+            while tick()-t0 < fade do
+                local p = (tick()-t0)/fade
+                bb.StudsOffset = startOff + Vector3.new(0, p*spd, 0)
+                lbl.TextTransparency      = p
+                lbl.TextStrokeTransparency= p
+                task.wait(1/30)
+            end
+            pcall(function() bb:Destroy() end)
+        end)
     end
 
     -- track enemy HP to detect damage
     local _lastHP = {}
+    local _charConns = {}
     local function _watchChar(plr)
+        -- disconnect old connections for this player
+        if _charConns[plr] then
+            for _, c in ipairs(_charConns[plr]) do pcall(function() c:Disconnect() end) end
+        end
+        _charConns[plr] = {}
         local char = plr.Character
         if not char then return end
         local hum = char:FindFirstChildOfClass("Humanoid")
         if not hum then return end
         _lastHP[plr] = hum.Health
-        hum:GetPropertyChangedSignal("Health"):Connect(function()
-            local newHP = hum.Health
+        local c1 = hum.HealthChanged:Connect(function(newHP)
             local oldHP = _lastHP[plr] or newHP
-            local delta = math.floor(oldHP - newHP)
             _lastHP[plr] = newHP
-            if delta <= 0 then return end
-            -- only show when WE likely caused it (rough: within 500 studs)
+            local delta = math.floor(oldHP - newHP)
+            if delta < 1 then return end
             local hrp = char:FindFirstChild("HumanoidRootPart")
-            local myHrp = _LP.Character and _LP.Character:FindFirstChild("HumanoidRootPart")
-            if not hrp or not myHrp then return end
-            if (hrp.Position - myHrp.Position).Magnitude > 600 then return end
-            local sp, vis = workspace.CurrentCamera:WorldToScreenPoint(hrp.Position + Vector3.new(0,2.5,0))
-            if not vis then return end
+            if not hrp then return end
             local isCrit = _ext["dmg_num_crit"] and delta >= 20
-            _spawnDmgNum(Vector2.new(sp.X, sp.Y), delta, isCrit)
+            _spawnDmgNum(hrp, delta, isCrit)
         end)
-        plr.CharacterAdded:Connect(function() task.wait(1); _watchChar(plr) end)
+        table.insert(_charConns[plr], c1)
     end
+
+    -- dump real leaderstats keys to chat once (so we know exact names)
+    task.delay(5, function()
+        local lead = _LP:FindFirstChild("leaderstats")
+        if lead then
+            local parts = {}
+            for _, v in ipairs(lead:GetChildren()) do
+                parts[#parts+1] = v.Name .. "(" .. v.ClassName .. ")=" .. tostring(v.Value)
+            end
+            pcall(function()
+                game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
+                    Text  = "[kami] leaderstats: " .. (next(parts) and table.concat(parts,", ") or "none"),
+                    Color = Color3.fromRGB(255,215,0),
+                })
+            end)
+        end
+    end)
 
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= _LP then _watchChar(plr) end
+        plr.CharacterAdded:Connect(function() task.wait(1); _watchChar(plr) end)
     end
     Players.PlayerAdded:Connect(function(plr)
         plr.CharacterAdded:Connect(function() task.wait(1); _watchChar(plr) end)
@@ -491846,26 +491877,9 @@ do
         local oz = _ext["vm_oz"] or -1.5
         -- detect first-person: camera close to head
         local head = _LP.Character and _LP.Character:FindFirstChild("Head")
-        local inFP = head and (cam.CFrame.Position - head.Position).Magnitude < 1.5
+        local inFP = head and (cam.CFrame.Position - head.Position).Magnitude < 4
         if not inFP then return end
         pcall(function() _vmModel:PivotTo(cam.CFrame * CFrame.new(ox, oy, oz)) end)
-    end)
-
-    RunService.RenderStepped:Connect(function(dt)
-        local speed = _ext["dmg_num_speed"] or 4
-        local fade  = _ext["dmg_num_fade"]  or 1
-        for i = #_dmgParticles, 1, -1 do
-            local p = _dmgParticles[i]
-            p.timer = p.timer + dt
-            p.y     = p.y - speed * dt * 30
-            p.alpha = math.max(0, 1 - (p.timer / fade))
-            p.d.Position = Vector2.new(p.d.Position.X, p.y)
-            p.d.Transparency = 1 - p.alpha
-            if p.alpha <= 0 then
-                pcall(function() p.d:Remove() end)
-                table.remove(_dmgParticles, i)
-            end
-        end
     end)
 
     -- ghost billboard
@@ -492013,31 +492027,26 @@ do
 
         -- FOV gradient fill
         if _ext["fov_fill_grad"] then
-            local Toggles = getgenv and getgenv().Toggles
-            local Options  = getgenv and getgenv().Options
-            local silentOn = Toggles and Toggles["silent_enabled"] and Toggles["silent_enabled"].Value
-            if silentOn then
-                local cam = workspace.CurrentCamera
-                local vp  = cam.ViewportSize
-                local cx, cy = vp.X * 0.5, vp.Y * 0.5
-                local fovDeg = (Options and Options["silent_fov_size"] and tonumber(Options["silent_fov_size"].Value)) or 80
-                local camHalf = math.tan(math.rad(cam.FieldOfView * 0.5))
-                local radius  = math.tan(math.rad(fovDeg * 0.5)) / camHalf * (vp.Y * 0.5)
-                local fillColor = _ext["fov_fill_color"] or Color3.fromRGB(210,170,55)
-                local maxAlpha  = _ext["fov_fill_alpha"] or 0.06
-                local steps = 5
-                for s = steps, 1, -1 do
-                    local t = s / steps
-                    local c = Drawing.new("Circle")
-                    c.Radius        = radius * t
-                    c.Position      = Vector2.new(cx, cy)
-                    c.Color         = fillColor
-                    c.Transparency  = 1 - (maxAlpha * (1 - (t - 1/steps)))
-                    c.Filled        = true
-                    c.Thickness     = 0
-                    c.Visible       = true
-                    table.insert(_espDraw, c)
-                end
+            local Options = getgenv and getgenv().Options
+            local cam = workspace.CurrentCamera
+            local vp  = cam.ViewportSize
+            local cx, cy = vp.X * 0.5, vp.Y * 0.5
+            local fovDeg = (Options and Options["silent_fov_size"] and tonumber(Options["silent_fov_size"].Value)) or 80
+            local camHalf = math.tan(math.rad(cam.FieldOfView * 0.5))
+            local radius  = math.tan(math.rad(fovDeg * 0.5)) / camHalf * (vp.Y * 0.5)
+            local fillColor = _ext["fov_fill_color"] or Color3.fromRGB(210,170,55)
+            local maxAlpha  = _ext["fov_fill_alpha"] or 0.06
+            for s = 5, 1, -1 do
+                local t = s / 5
+                local c = Drawing.new("Circle")
+                c.Radius       = radius * t
+                c.Position     = Vector2.new(cx, cy)
+                c.Color        = fillColor
+                c.Transparency = 1 - (maxAlpha * (1 - (t - 0.2)))
+                c.Filled       = true
+                c.Thickness    = 0
+                c.Visible      = true
+                table.insert(_espDraw, c)
             end
         end
         if not (_ext["esp_rank_badge"] or _ext["esp_deflecting"]) then return end
