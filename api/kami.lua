@@ -491249,8 +491249,14 @@ end)
     UI.addSlider(spoofSec, "Win Streak Value",  0, 999,  25,  false, function(v) _ext["spoof_streak_val"] = v end)
 
     local appearSec = UI.createSection(miscTabObj, "Appearance", "right")
-    UI.addToggle(appearSec, "Headless",    false, function(v) _ext["headless_on"] = v end)
-    UI.addToggle(appearSec, "Jett Hands",  false, function(v) _ext["jett_hands"]  = v end)
+    UI.addToggle(appearSec, "Headless",   false, function(v) _ext["headless_on"] = v end)
+    UI.addToggle(appearSec, "VM Hands",   false, function(v)
+        _ext["jett_hands"] = v
+        if v then _vmLoad() else _vmDestroy() end
+    end)
+    UI.addSlider(appearSec, "VM Offset X", -20, 20,   4, false, function(v) _ext["vm_ox"] = v * 0.1 end)
+    UI.addSlider(appearSec, "VM Offset Y", -30, 10,  -8, false, function(v) _ext["vm_oy"] = v * 0.1 end)
+    UI.addSlider(appearSec, "VM Offset Z", -25, -5, -15, false, function(v) _ext["vm_oz"] = v * 0.1 end)
 
 
     local _toggleKey   = Enum.KeyCode.RightShift
@@ -491800,6 +491806,51 @@ do
         plr.CharacterAdded:Connect(function() task.wait(1); _watchChar(plr) end)
     end)
 
+    -- ── viewmodel hands ──────────────────────────────────────────
+    local _IS      = game:GetService("InsertService")
+    local _VM_ID   = 5654106509
+    local _vmModel = nil
+
+    function _vmDestroy()
+        if _vmModel then pcall(function() _vmModel:Destroy() end); _vmModel = nil end
+    end
+
+    function _vmLoad()
+        _vmDestroy()
+        task.spawn(function()
+            local ok, container = pcall(function() return _IS:LoadAsset(_VM_ID) end)
+            if not ok or not container then return end
+            -- InsertService wraps in a Model; move children out into Camera
+            local cam = workspace.CurrentCamera
+            local inner = container:FindFirstChildOfClass("Model") or container:GetChildren()[1]
+            if inner then
+                inner.Parent = cam
+                _vmModel = inner
+            else
+                container.Parent = cam
+                _vmModel = container
+            end
+            pcall(function() container:Destroy() end)
+            -- set PrimaryPart if missing
+            if _vmModel and _vmModel:IsA("Model") and not _vmModel.PrimaryPart then
+                _vmModel.PrimaryPart = _vmModel:FindFirstChildOfClass("BasePart", true)
+            end
+        end)
+    end
+
+    RunService.RenderStepped:Connect(function()
+        if not (_ext["jett_hands"] and _vmModel) then return end
+        local cam = workspace.CurrentCamera
+        local ox = _ext["vm_ox"] or  0.4
+        local oy = _ext["vm_oy"] or -0.8
+        local oz = _ext["vm_oz"] or -1.5
+        -- detect first-person: camera close to head
+        local head = _LP.Character and _LP.Character:FindFirstChild("Head")
+        local inFP = head and (cam.CFrame.Position - head.Position).Magnitude < 1.5
+        if not inFP then return end
+        pcall(function() _vmModel:PivotTo(cam.CFrame * CFrame.new(ox, oy, oz)) end)
+    end)
+
     RunService.RenderStepped:Connect(function(dt)
         local speed = _ext["dmg_num_speed"] or 4
         local fade  = _ext["dmg_num_fade"]  or 1
@@ -491940,30 +491991,16 @@ do
             end
         end
 
-        -- Jett hands
-        if char and _ext["jett_hands"] then
-            local JETT_SKIN  = Color3.fromRGB(240, 178, 148)
-            local JETT_GLOVE = Color3.fromRGB(22,  20,  28)
-            local R15_UPPER  = {"LeftUpperArm","RightUpperArm"}
-            local R15_LOWER  = {"LeftLowerArm","RightLowerArm","LeftHand","RightHand"}
-            for _, name in ipairs(R15_UPPER) do
-                local p = char:FindFirstChild(name)
-                if p then pcall(function() p.Color = JETT_SKIN end) end
-            end
-            for _, name in ipairs(R15_LOWER) do
-                local p = char:FindFirstChild(name)
-                if p then pcall(function() p.Color = JETT_GLOVE end) end
-            end
-            -- R6 fallback: whole arm = skin, no separate hand
-            local r6L = char:FindFirstChild("Left Arm")
-            local r6R = char:FindFirstChild("Right Arm")
-            if r6L then pcall(function() r6L.Color = JETT_SKIN end) end
-            if r6R then pcall(function() r6R.Color = JETT_SKIN end) end
-            -- sync BodyColors so respawn doesn't flash
-            local bc = char:FindFirstChildOfClass("BodyColors")
-            if bc then
-                pcall(function() bc.LeftArmColor3  = JETT_SKIN end)
-                pcall(function() bc.RightArmColor3 = JETT_SKIN end)
+        -- hide real arms when viewmodel is active
+        if char then
+            local _ARM_NAMES = {
+                "LeftUpperArm","RightUpperArm","LeftLowerArm","RightLowerArm","LeftHand","RightHand",
+                "Left Arm","Right Arm",
+            }
+            local wantHide = _ext["jett_hands"] and 1 or 0
+            for _, n in ipairs(_ARM_NAMES) do
+                local p = char:FindFirstChild(n)
+                if p then pcall(function() p.LocalTransparencyModifier = wantHide end) end
             end
         end
     end)
