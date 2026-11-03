@@ -490929,42 +490929,36 @@ function UI.addColorPicker(container, labelText, defaultColor, callback)
     local curColor = defaultColor
     local selIdx   = 1
 
-    -- UE accent palette (from built-in theme presets) + common extras
+    -- UE theme accent palette — exactly the 10 built-in presets
     local SWATCHES = {
-        {Color3.fromRGB(210,170, 55), "Gold"},       -- UE default accent
-        {Color3.fromRGB(162,205,255), "Ice Blue"},    -- a2cdff
-        {Color3.fromRGB(105, 86,203), "Purple"},      -- 6956cb
-        {Color3.fromRGB(158,255,200), "Mint"},        -- 9effc8
-        {Color3.fromRGB(250,166, 20), "Amber"},       -- faa614
-        {Color3.fromRGB(  1,163,241), "Cyan"},        -- 01a3f1
-        {Color3.fromRGB(196,  7,189), "Magenta"},     -- c707bd
-        {Color3.fromRGB(205, 24,120), "Crimson"},     -- ca0756
-        {Color3.fromRGB( 89, 69,255), "Indigo"},      -- 5945ff
-        {Color3.fromRGB(129,255, 84), "Lime"},        -- 81ff54
-        {Color3.fromRGB(215,166,176), "Blush"},       -- d7a6b0
-        {Color3.fromRGB(205, 24, 24), "Red"},         -- cd1818
-        {Color3.fromRGB(255,255,255), "White"},
-        {Color3.fromRGB(180,180,180), "Silver"},
+        {Color3.fromRGB(210,170, 55)},  -- Gold
+        {Color3.fromRGB(162,205,255)},  -- Ice Blue
+        {Color3.fromRGB(105, 86,203)},  -- Purple
+        {Color3.fromRGB(158,255,200)},  -- Mint
+        {Color3.fromRGB(250,166, 20)},  -- Amber
+        {Color3.fromRGB(  1,163,241)},  -- Cyan
+        {Color3.fromRGB(196,  7,189)},  -- Magenta
+        {Color3.fromRGB(205, 24,120)},  -- Crimson
+        {Color3.fromRGB( 89, 69,255)},  -- Indigo
+        {Color3.fromRGB(129,255, 84)},  -- Lime
     }
 
-    -- find closest preset to defaultColor
-    local function setByColor(c)
-        for i, sw in ipairs(SWATCHES) do
-            if sw[1] == c then selIdx = i; return end
-        end
+    for i, sw in ipairs(SWATCHES) do
+        local r1,g1,b1 = sw[1].R*255, sw[1].G*255, sw[1].B*255
+        local dr,dg,db = defaultColor.R*255, defaultColor.G*255, defaultColor.B*255
+        if math.abs(r1-dr)<4 and math.abs(g1-dg)<4 and math.abs(b1-db)<4 then selIdx=i; break end
     end
-    setByColor(defaultColor)
 
-    -- fixed-height wrapper: 26px header + 20px swatch row = 46px total
+    -- fixed height: 20px header row + 20px swatch row = 40px
     local wrapper = Instance.new("Frame")
     wrapper.Name = "CP_" .. labelText
-    wrapper.Size = UDim2.new(1, 0, 0, 46)
+    wrapper.Size = UDim2.new(1, 0, 0, 40)
     wrapper.BackgroundTransparency = 1
     wrapper.Parent = container
 
-    -- label
+    -- header row: label left, color preview dot right
     local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, 0, 0, 18)
+    lbl.Size = UDim2.new(1, -26, 0, 18)
     lbl.BackgroundTransparency = 1
     lbl.Text = labelText
     if UI_FONT then pcall(function() lbl.FontFace = UI_FONT end) end
@@ -490973,53 +490967,60 @@ function UI.addColorPicker(container, labelText, defaultColor, callback)
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.Parent = wrapper
 
+    local preview = Instance.new("Frame")
+    preview.Size = UDim2.new(0, 14, 0, 14)
+    preview.Position = UDim2.new(1, -16, 0, 2)
+    preview.BackgroundColor3 = defaultColor
+    preview.BorderSizePixel = 0
+    preview.Parent = wrapper
+    local previewCorner = Instance.new("UICorner")
+    previewCorner.CornerRadius = UDim.new(0, 2)
+    previewCorner.Parent = preview
+    local previewStroke = Instance.new("UIStroke")
+    previewStroke.Color = COLORS.PanelBorder
+    previewStroke.Thickness = 1
+    previewStroke.Parent = preview
+
     -- swatch strip
     local strip = Instance.new("Frame")
-    strip.Size = UDim2.new(1, 0, 0, 20)
-    strip.Position = UDim2.new(0, 0, 0, 20)
+    strip.Size = UDim2.new(1, 0, 0, 18)
+    strip.Position = UDim2.new(0, 0, 0, 22)
     strip.BackgroundTransparency = 1
     strip.Parent = wrapper
 
-    local _selStroke = nil  -- track border on selected swatch
+    local _selStroke = nil
 
     for i, sw in ipairs(SWATCHES) do
         local dot = Instance.new("TextButton")
-        dot.Size = UDim2.new(0, 14, 0, 14)
-        dot.Position = UDim2.new(0, (i-1)*16, 0, 2)
+        dot.Size = UDim2.new(0, 15, 0, 15)
+        dot.Position = UDim2.new(0, (i-1)*17, 0, 1)
         dot.BackgroundColor3 = sw[1]
         dot.Text = ""
         dot.BorderSizePixel = 0
         dot.ZIndex = 6
         dot.Parent = strip
-
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 2)
+        corner.Parent = dot
         local st = Instance.new("UIStroke")
-        st.Color = (i == selIdx) and COLORS.AccentGlow or Color3.fromRGB(40,40,40)
+        st.Color = (i == selIdx) and COLORS.AccentGlow or Color3.fromRGB(35,35,35)
         st.Thickness = (i == selIdx) and 1.5 or 1
         st.Parent = dot
         if i == selIdx then _selStroke = st end
 
         dot.MouseEnter:Connect(function()
             if st ~= _selStroke then
-                tween(dot, {BackgroundColor3 = sw[1]:Lerp(Color3.fromRGB(255,255,255), 0.25)}, 0.1)
+                tween(dot, {BackgroundColor3 = sw[1]:Lerp(Color3.fromRGB(255,255,255), 0.3)}, 0.08)
             end
         end)
         dot.MouseLeave:Connect(function()
-            if st ~= _selStroke then
-                tween(dot, {BackgroundColor3 = sw[1]}, 0.1)
-            end
+            if st ~= _selStroke then tween(dot, {BackgroundColor3 = sw[1]}, 0.08) end
         end)
-
         dot.MouseButton1Click:Connect(function()
-            -- clear old selection border
-            if _selStroke then
-                _selStroke.Color = Color3.fromRGB(40,40,40)
-                _selStroke.Thickness = 1
-            end
-            selIdx = i
-            curColor = sw[1]
-            st.Color = COLORS.AccentGlow
-            st.Thickness = 1.5
-            _selStroke = st
+            if _selStroke then _selStroke.Color = Color3.fromRGB(35,35,35); _selStroke.Thickness = 1 end
+            selIdx = i; curColor = sw[1]
+            st.Color = COLORS.AccentGlow; st.Thickness = 1.5; _selStroke = st
+            tween(preview, {BackgroundColor3 = curColor}, 0.12)
             if callback then callback(curColor) end
         end)
     end
@@ -491177,6 +491178,9 @@ end)
     local silentExtSec = UI.createSection(aimTabObj, "Silent Aim", "left")
     UI.addToggle(silentExtSec, "Riot Shield Check",    false, function(v) _ext["silent_riot_shield_check"] = v end)
     UI.addToggle(silentExtSec, "Avoid Katana Deflect", false, function(v) _ext["silent_avoid_deflect"]     = v end)
+    UI.addToggle(silentExtSec, "FOV Gradient Fill",    false, function(v) _ext["fov_fill_grad"]            = v end)
+    UI.addColorPicker(silentExtSec, "FOV Fill Color", Color3.fromRGB(210,170,55), function(v) _ext["fov_fill_color"] = v end)
+    UI.addSlider(silentExtSec, "FOV Fill Opacity", 2, 20, 6, false, function(v) _ext["fov_fill_alpha"] = v / 100 end)
 
     -- ── Misc tab ──────────────────────────────────────────────
     local miscTabObj = _tabObjects[4]
@@ -491845,11 +491849,41 @@ do
         end
     end)
 
-    -- rank badge + deflecting ESP drawings
+    -- rank badge + deflecting ESP drawings + FOV gradient
     local _espDraw = {}
     RunService.RenderStepped:Connect(function()
         for _, d in ipairs(_espDraw) do pcall(function() d:Remove() end) end
         _espDraw = {}
+
+        -- FOV gradient fill
+        if _ext["fov_fill_grad"] then
+            local Toggles = getgenv and getgenv().Toggles
+            local Options  = getgenv and getgenv().Options
+            local silentOn = Toggles and Toggles["silent_enabled"] and Toggles["silent_enabled"].Value
+            if silentOn then
+                local cam = workspace.CurrentCamera
+                local vp  = cam.ViewportSize
+                local cx, cy = vp.X * 0.5, vp.Y * 0.5
+                local fovDeg = (Options and Options["silent_fov_size"] and tonumber(Options["silent_fov_size"].Value)) or 80
+                local camHalf = math.tan(math.rad(cam.FieldOfView * 0.5))
+                local radius  = math.tan(math.rad(fovDeg * 0.5)) / camHalf * (vp.Y * 0.5)
+                local fillColor = _ext["fov_fill_color"] or Color3.fromRGB(210,170,55)
+                local maxAlpha  = _ext["fov_fill_alpha"] or 0.06
+                local steps = 5
+                for s = steps, 1, -1 do
+                    local t = s / steps
+                    local c = Drawing.new("Circle")
+                    c.Radius        = radius * t
+                    c.Position      = Vector2.new(cx, cy)
+                    c.Color         = fillColor
+                    c.Transparency  = 1 - (maxAlpha * (1 - (t - 1/steps)))
+                    c.Filled        = true
+                    c.Thickness     = 0
+                    c.Visible       = true
+                    table.insert(_espDraw, c)
+                end
+            end
+        end
         if not (_ext["esp_rank_badge"] or _ext["esp_deflecting"]) then return end
         local cam = workspace.CurrentCamera
         for _, plr in ipairs(Players:GetPlayers()) do
