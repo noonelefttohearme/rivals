@@ -491237,16 +491237,38 @@ end)
         ["Radiant"]=2500,
     }
 
+    -- immediate leaderstats write helper (used by toggles + sliders)
+    local function _applySpoof()
+        local lead = _LP:FindFirstChild("leaderstats")
+        if not lead then return end
+        for _, v in ipairs(lead:GetChildren()) do
+            local n = v.Name:lower():gsub("%s+","")
+            if _ext["spoof_rank"] and (n=="rank" or n=="ranked" or n=="elo" or n=="rating" or n=="mmr" or n=="sr") then
+                pcall(function()
+                    if type(v.Value)=="string" then v.Value = _ext["spoof_rank_str"] or "Gold II"
+                    else v.Value = _ext["spoof_rank_mmr"] or 1100 end
+                end)
+            end
+            if _ext["spoof_level"] and (n=="level" or n=="lvl" or n=="xp" or n=="prestige") then
+                pcall(function() v.Value = _ext["spoof_level_val"] or 50 end)
+            end
+            if _ext["spoof_streak"] and (n=="winstreak" or n=="streak" or n=="wins" or n=="wstreak") then
+                pcall(function() v.Value = _ext["spoof_streak_val"] or 25 end)
+            end
+        end
+    end
+
     local spoofSec = UI.createSection(miscTabObj, "Spoof", "left")
-    UI.addToggle(spoofSec, "Spoof Rank",       false, function(v) _ext["spoof_rank"]     = v end)
+    UI.addToggle(spoofSec, "Spoof Rank",       false, function(v) _ext["spoof_rank"]     = v; _applySpoof() end)
     UI.addDropdown(spoofSec, "Rank", _RIVALS_RANKS, "Gold II", function(v)
         _ext["spoof_rank_str"] = v
         _ext["spoof_rank_mmr"] = _RANK_MMR[v] or 1100
+        _applySpoof()
     end)
-    UI.addToggle(spoofSec, "Spoof Level",      false, function(v) _ext["spoof_level"]    = v end)
-    UI.addSlider(spoofSec, "Level Value",       1, 999,  50,  false, function(v) _ext["spoof_level_val"]  = v end)
-    UI.addToggle(spoofSec, "Spoof Win Streak", false, function(v) _ext["spoof_streak"]   = v end)
-    UI.addSlider(spoofSec, "Win Streak Value",  0, 999,  25,  false, function(v) _ext["spoof_streak_val"] = v end)
+    UI.addToggle(spoofSec, "Spoof Level",      false, function(v) _ext["spoof_level"]    = v; _applySpoof() end)
+    UI.addSlider(spoofSec, "Level Value",       1, 999,  50,  false, function(v) _ext["spoof_level_val"]  = v; _applySpoof() end)
+    UI.addToggle(spoofSec, "Spoof Win Streak", false, function(v) _ext["spoof_streak"]   = v; _applySpoof() end)
+    UI.addSlider(spoofSec, "Win Streak Value",  0, 999,  25,  false, function(v) _ext["spoof_streak_val"] = v; _applySpoof() end)
 
     local appearSec = UI.createSection(miscTabObj, "Appearance", "right")
     UI.addToggle(appearSec, "Headless",   false, function(v) _ext["headless_on"] = v end)
