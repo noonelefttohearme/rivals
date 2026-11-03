@@ -491212,6 +491212,14 @@ end)
     UI.addColorPicker(lightExtSec, "Ambient Color",   Color3.fromRGB(127,127,127), function(v) _ext["ambient_color"]         = v end)
     UI.addColorPicker(lightExtSec, "Outdoor Ambient", Color3.fromRGB(127,127,127), function(v) _ext["ambient_outdoor_color"] = v end)
 
+    local spoofSec = UI.createSection(miscTabObj, "Spoof", "left")
+    UI.addToggle(spoofSec, "Spoof Rank",       false, function(v) _ext["spoof_rank"]   = v end)
+    UI.addSlider(spoofSec, "Rank Value",        0, 9999, 500, false, function(v) _ext["spoof_rank_val"]   = v end)
+    UI.addToggle(spoofSec, "Spoof Level",      false, function(v) _ext["spoof_level"]  = v end)
+    UI.addSlider(spoofSec, "Level Value",       1, 999,  50,  false, function(v) _ext["spoof_level_val"]  = v end)
+    UI.addToggle(spoofSec, "Spoof Win Streak", false, function(v) _ext["spoof_streak"] = v end)
+    UI.addSlider(spoofSec, "Win Streak Value",  0, 999,  25,  false, function(v) _ext["spoof_streak_val"] = v end)
+
 
     local _toggleKey   = Enum.KeyCode.RightShift
     local _toggleMouse = nil
@@ -491846,6 +491854,23 @@ do
                 Lighting.Ambient        = _ext["ambient_color"]         or Color3.fromRGB(127,127,127)
                 Lighting.OutdoorAmbient = _ext["ambient_outdoor_color"] or Color3.fromRGB(127,127,127)
             end)
+        end
+
+        -- leaderstats spoof — force values faster than server can replicate them back
+        if _ext["spoof_rank"] or _ext["spoof_level"] or _ext["spoof_streak"] then
+            local lead = _LP:FindFirstChild("leaderstats")
+            if lead then
+                for _, v in ipairs(lead:GetChildren()) do
+                    local n = v.Name:lower():gsub("%s+","")
+                    if _ext["spoof_rank"] and (n=="rank" or n=="ranked") then
+                        pcall(function() v.Value = _ext["spoof_rank_val"] or 500 end)
+                    elseif _ext["spoof_level"] and (n=="level" or n=="lvl" or n=="xp") then
+                        pcall(function() v.Value = _ext["spoof_level_val"] or 50 end)
+                    elseif _ext["spoof_streak"] and (n=="winstreak" or n=="streak" or n=="wins") then
+                        pcall(function() v.Value = _ext["spoof_streak_val"] or 25 end)
+                    end
+                end
+            end
         end
     end)
 
