@@ -491833,6 +491833,39 @@ do
     local _LP  = Players.LocalPlayer
     local _hue = 0
 
+    -- ── hookmetamethod spoof: intercepts ALL TextLabel.Text writes so server can't overwrite ──
+    pcall(function()
+        local _origNI = hookmetamethod(game, "__newindex", newcclosure(function(self, key, value)
+            if key == "Text" and type(value) == "string"
+               and (_ext["spoof_rank"] or _ext["spoof_level"] or _ext["spoof_streak"]) then
+                local ok, isLabel = pcall(function() return self:IsA("TextLabel") or self:IsA("TextBox") end)
+                if ok and isLabel then
+                    local num = value:match("^%s*(%d+)")
+                    if num then
+                        local ctx = ""
+                        pcall(function()
+                            ctx = (self.Name .. " "):lower()
+                            local par = self.Parent
+                            if par then
+                                ctx = ctx .. par.Name:lower() .. " "
+                                if par.Parent then ctx = ctx .. par.Parent.Name:lower() .. " " end
+                            end
+                        end)
+                        ctx = ctx .. value:lower()
+                        if _ext["spoof_streak"] and (ctx:find("streak") or ctx:find("wstreak") or ctx:find("winstreak") or ctx:find("combo") or (ctx:find("win") and not ctx:find("rate") and not ctx:find("wins"))) then
+                            value = value:gsub("^%s*%d+", tostring(_ext["spoof_streak_val"] or 25))
+                        elseif _ext["spoof_level"] and (ctx:find("level") or ctx:find(" lv") or ctx:find("lvl") or ctx:find("prestige")) then
+                            value = value:gsub("^%s*%d+", tostring(_ext["spoof_level_val"] or 50))
+                        elseif _ext["spoof_rank"] and (ctx:find("rank") or ctx:find("elo") or ctx:find("rating") or ctx:find("mmr")) then
+                            value = value:gsub("^%s*%d+", tostring(_ext["spoof_rank_val"] or 1000))
+                        end
+                    end
+                end
+            end
+            return _origNI(self, key, value)
+        end))
+    end)
+
     -- ── damage numbers system ─────────────────────────────────
     local _fontMap = {
         ["Monocraft"]   = "rbxasset://fonts/families/RobotoMono.json",
