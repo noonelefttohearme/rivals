@@ -286,5 +286,37 @@ app.get('/key/:discord_id', async (req, res) => {
   return res.json({ ok: true, ...data });
 });
 
+// POST /freekey  { discord_id }  — Workink-gated free key generation
+// Caller must have already verified the user completed Workink before calling this.
+app.post('/freekey', async (req, res) => {
+  if (req.headers['x-bot-secret'] !== BOT_SECRET)
+    return res.status(401).json({ ok: false, message: 'Unauthorized.' });
+
+  const { discord_id } = req.body;
+  if (!discord_id) return res.json({ ok: false, message: 'Missing discord_id.' });
+
+  // one free key per Discord account
+  const { data: existing } = await supabase
+    .from('licenses')
+    .select('key')
+    .eq('discord_id', discord_id)
+    .single();
+
+  if (existing) return res.json({ ok: false, message: 'You already have a key.' });
+
+  const seg = () => Math.random().toString(36).toUpperCase().slice(2, 6).padEnd(4, '0');
+  const key = `KAMI-${seg()}-${seg()}-${seg()}`;
+
+  const { error } = await supabase.from('licenses').insert({
+    key,
+    script_type: 'rivals',
+    discord_id,
+    redeemed_at: new Date().toISOString(),
+  });
+
+  if (error) return res.json({ ok: false, message: `Failed: ${error.message}` });
+  return res.json({ ok: true, key, script_type: 'rivals' });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`API running on :${PORT}`));

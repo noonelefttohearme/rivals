@@ -3,11 +3,12 @@ const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-const API_URL    = process.env.API_URL;
-const BOT_SECRET = process.env.BOT_SECRET;
-const SCRIPT_URL = process.env.SCRIPT_URL;
-const HUB_NAME   = process.env.HUB_NAME || 'kamidere';
-const EMOJI_ID   = process.env.KAMIDERE_EMOJI_ID;
+const API_URL       = process.env.API_URL;
+const BOT_SECRET    = process.env.BOT_SECRET;
+const SCRIPT_URL    = process.env.SCRIPT_URL;
+const HUB_NAME      = process.env.HUB_NAME || 'kamidere';
+const EMOJI_ID      = process.env.KAMIDERE_EMOJI_ID;
+const WORKINK_ID    = process.env.WORKINK_ID || '';   // set in .env → your Work.ink checkpoint ID
 
 const SCRIPT_ROLES = {
   rivals: '1562921775992541284',
@@ -71,7 +72,12 @@ function buildPanel() {
     new ButtonBuilder().setCustomId('reset_hwid').setLabel('Reset HWID').setStyle(ButtonStyle.Danger).setEmoji('🔄'),
   );
 
-  return { embeds: [embed], components: [row1, row2] };
+  const row3 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('free_key').setLabel('Get Free Key').setStyle(ButtonStyle.Primary).setEmoji('🎁'),
+    new ButtonBuilder().setCustomId('claim_free_key').setLabel('Claim Key').setStyle(ButtonStyle.Success).setEmoji('✅'),
+  );
+
+  return { embeds: [embed], components: [row1, row2, row3] };
 }
 
 client.on('error', err => console.error('Discord client error:', err));
@@ -423,6 +429,128 @@ client.on('interactionCreate', async interaction => {
     } catch {
       return interaction.editReply({ embeds: [errEmbed('Could not assign role. Check bot permissions.')] });
     }
+  }
+
+  // ── GET FREE KEY (Workink gate) ──────────────────────────────────────────────
+  if (interaction.customId === 'free_key') {
+    await interaction.deferReply({ ephemeral: true });
+
+    // check if already has a key
+    const existing = await apiCall('GET', `/key/${userId}`);
+    if (existing.ok) {
+      return interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(COLORS.gold)
+            .setTitle('🔑  Already Have a Key')
+            .setDescription('> You already have a key. Use **Get Script** to grab your loader.')
+            .setFooter(footer()),
+        ],
+      });
+    }
+
+    if (!WORKINK_ID) {
+      return interaction.editReply({
+        embeds: [errEmbed('Free key system is not configured yet. Contact an admin.')],
+      });
+    }
+
+    const workinkUrl = `https://work.ink/${WORKINK_ID}/${userId}`;
+
+    return interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(COLORS.gold)
+          .setTitle('🎁  Get Your Free Key')
+          .setDescription(
+            `> **Step 1 —** Complete the checkpoint below.\n> **Step 2 —** Come back and click **Claim Key**.\n\n🔗  [Click here to complete](${workinkUrl})`
+          )
+          .setFooter({ ...footer(), text: `${HUB_NAME} · complete all steps on the page` })
+          .setTimestamp(),
+      ],
+    });
+  }
+
+  // ── CLAIM FREE KEY (after Workink completion) ────────────────────────────────
+  if (interaction.customId === 'claim_free_key') {
+    await interaction.deferReply({ ephemeral: true });
+
+    if (!WORKINK_ID) {
+      return interaction.editReply({
+        embeds: [errEmbed('Free key system is not configured yet. Contact an admin.')],
+      });
+    }
+
+    // check if already has a key
+    const existingKey = await apiCall('GET', `/key/${userId}`);
+    if (existingKey.ok) {
+      return interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(COLORS.gold)
+            .setTitle('🔑  Already Have a Key')
+            .setDescription('> You already have a key. Use **Get Script** to grab your loader.')
+            .setFooter(footer()),
+        ],
+      });
+    }
+
+    // verify Workink HWID completion
+    let verified = false;
+    try {
+      const wiRes = await fetch(
+        `https://api.work.ink/${WORKINK_ID}/check?HWID=${userId}`,
+        { signal: AbortSignal.timeout(10000) }
+      );
+      const wiBody = await wiRes.json();
+      verified = wiBody.success === true;
+    } catch {
+      return interaction.editReply({
+        embeds: [errEmbed('Could not reach Workink. Try again in a moment.')],
+      });
+    }
+
+    if (!verified) {
+      const workinkUrl = `https://work.ink/${WORKINK_ID}/${userId}`;
+      return interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(COLORS.err)
+            .setTitle('❌  Not Verified')
+            .setDescription(
+              `> Workink checkpoint not completed yet.\n> [Complete it here](${workinkUrl}) then click **Claim Key** again.`
+            )
+            .setFooter(footer()),
+        ],
+      });
+    }
+
+    // generate and bind free key
+    const data = await apiCall('POST', '/freekey', { discord_id: userId });
+
+    if (!data.ok) {
+      return interaction.editReply({ embeds: [errEmbed(data.message)] });
+    }
+
+    // assign role
+    const roleId = SCRIPT_ROLES[data.script_type];
+    if (roleId) {
+      try { await interaction.member.roles.add(roleId); } catch {}
+    }
+
+    return interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(COLORS.green)
+          .setTitle('✅  Free Key Claimed')
+          .setDescription('> Your key is active. Click **Get Script** to grab your loader.')
+          .addFields(
+            { name: '🔑  Key', value: `\`\`\`${data.key}\`\`\`` },
+          )
+          .setFooter(footer())
+          .setTimestamp(),
+      ],
+    });
   }
 
   // ── RESET HWID ───────────────────────────────────────────────────────────────
