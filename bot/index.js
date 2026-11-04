@@ -75,8 +75,7 @@ function buildPanel() {
   );
 
   const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('free_key').setLabel('Get Free Key').setStyle(ButtonStyle.Primary).setEmoji('🎁'),
-    new ButtonBuilder().setCustomId('claim_free_key').setLabel('Claim Key').setStyle(ButtonStyle.Success).setEmoji('✅'),
+    new ButtonBuilder().setCustomId('claim_free_key').setLabel('Get Free Key').setStyle(ButtonStyle.Primary).setEmoji('🎁'),
   );
 
   return { embeds: [embed], components: [row1, row2, row3] };
@@ -513,8 +512,8 @@ client.on('interactionCreate', async interaction => {
       embeds: [
         new EmbedBuilder()
           .setColor(COLORS.green)
-          .setTitle('✅  Free Key Claimed')
-          .setDescription('> Your key is active. Click **Get Script** to grab your loader.')
+          .setTitle('🎁  Free Key Claimed')
+          .setDescription('> Your free key is active. Click **Get Script** to grab your loader.\n> ⚠️  This is the **free version** of the script.')
           .addFields(
             { name: '🔑  Key', value: `\`\`\`${data.key}\`\`\`` },
           )
