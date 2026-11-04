@@ -8,7 +8,7 @@ const BOT_SECRET    = process.env.BOT_SECRET;
 const SCRIPT_URL    = process.env.SCRIPT_URL;
 const HUB_NAME      = process.env.HUB_NAME || 'kamidere';
 const EMOJI_ID      = process.env.KAMIDERE_EMOJI_ID;
-const WORKINK_ID    = process.env.WORKINK_ID || '391n';
+const WORKINK_ID    = process.env.WORKINK_ID || '749665';
 
 const SCRIPT_ROLES = {
   rivals: '1562921775992541284',
