@@ -491884,38 +491884,70 @@ do
     local _spoofGuiFrame = 0
 
     -- GUI-layer spoof: patch any profile/stat panel that opens in PlayerGui
+    -- also hooks Text changes so server refreshes are immediately re-patched
+    local _hookedLabels = {} -- [label] = true, prevents double-connecting
+    local function _patchLabel(d)
+        if not (_ext["spoof_rank"] or _ext["spoof_level"] or _ext["spoof_streak"]) then return end
+        local txt = d.Text
+        if txt == "" or txt == "..." then return end
+        local ctx = d.Name:lower()
+        local par = d.Parent
+        if par then
+            ctx = ctx .. " " .. par.Name:lower()
+            for _, s in ipairs(par:GetChildren()) do
+                ctx = ctx .. " " .. s.Name:lower()
+                if s:IsA("TextLabel") and s ~= d then ctx = ctx .. " " .. s.Text:lower() end
+            end
+            if par.Parent then ctx = ctx .. " " .. par.Parent.Name:lower() end
+        end
+        ctx = ctx .. " " .. txt:lower()
+        local num = txt:match("^%s*(%d+)")
+        if num then
+            if _ext["spoof_rank"] and (ctx:find("rank") or ctx:find("elo") or ctx:find("rating") or ctx:find("mmr") or ctx:find("score") or ctx:find("sr ") or ctx:find(" sr")) then
+                pcall(function() d.Text = txt:gsub("^%s*%d+", tostring(_ext["spoof_rank_val"] or 1000)) end)
+                return true
+            elseif _ext["spoof_level"] and (ctx:find("level") or ctx:find(" lv") or ctx:find("lvl") or ctx:find("xp") or ctx:find("prestige")) then
+                pcall(function() d.Text = txt:gsub("^%s*%d+", tostring(_ext["spoof_level_val"] or 50)) end)
+                return true
+            elseif _ext["spoof_streak"] and (ctx:find("streak") or ctx:find("win") or ctx:find("combo")) then
+                pcall(function() d.Text = txt:gsub("^%s*%d+", tostring(_ext["spoof_streak_val"] or 25)) end)
+                return true
+            end
+        end
+    end
+
+    local function _hookLabel(d)
+        if _hookedLabels[d] then return end
+        _hookedLabels[d] = true
+        -- re-patch immediately whenever the server overwrites the text
+        pcall(function()
+            d:GetPropertyChangedSignal("Text"):Connect(function()
+                if _ext["spoof_rank"] or _ext["spoof_level"] or _ext["spoof_streak"] then
+                    _patchLabel(d)
+                end
+            end)
+        end)
+    end
+
     local function _patchGuiStats(root)
         if not (_ext["spoof_rank"] or _ext["spoof_level"] or _ext["spoof_streak"]) then return end
         for _, d in ipairs(root:GetDescendants()) do
             if d:IsA("TextLabel") or d:IsA("TextBox") then
-                local txt = d.Text
-                if txt == "" or txt == "..." then continue end
-                -- build context from element name + sibling names/text + parent name
-                local ctx = d.Name:lower()
-                local par = d.Parent
-                if par then
-                    ctx = ctx .. " " .. par.Name:lower()
-                    for _, s in ipairs(par:GetChildren()) do
-                        ctx = ctx .. " " .. s.Name:lower()
-                        if s:IsA("TextLabel") and s ~= d then ctx = ctx .. " " .. s.Text:lower() end
-                    end
-                    if par.Parent then ctx = ctx .. " " .. par.Parent.Name:lower() end
-                end
-                -- also include the element's own text as context (for "60 Level", "62 Streak")
-                ctx = ctx .. " " .. txt:lower()
-                -- extract leading number from text (handles "60", "60 Level", "139 wins" etc.)
-                local num = txt:match("^%s*(%d+)")
-                if num then
-                    if _ext["spoof_rank"] and (ctx:find("rank") or ctx:find("elo") or ctx:find("rating") or ctx:find("mmr") or ctx:find("score") or ctx:find("sr ") or ctx:find(" sr")) then
-                        pcall(function() d.Text = txt:gsub("^%s*%d+", tostring(_ext["spoof_rank_val"] or 1000)) end)
-                    elseif _ext["spoof_level"] and (ctx:find("level") or ctx:find(" lv") or ctx:find("lvl") or ctx:find("xp") or ctx:find("prestige")) then
-                        pcall(function() d.Text = txt:gsub("^%s*%d+", tostring(_ext["spoof_level_val"] or 50)) end)
-                    elseif _ext["spoof_streak"] and (ctx:find("streak") or ctx:find("win") or ctx:find("combo")) then
-                        pcall(function() d.Text = txt:gsub("^%s*%d+", tostring(_ext["spoof_streak_val"] or 25)) end)
-                    end
-                end
+                local hit = _patchLabel(d)
+                if hit then _hookLabel(d) end
             end
         end
+        -- also watch for new descendants appearing inside this root
+        pcall(function()
+            root.DescendantAdded:Connect(function(d)
+                if d:IsA("TextLabel") or d:IsA("TextBox") then
+                    task.delay(0.1, function()
+                        local hit = _patchLabel(d)
+                        if hit then _hookLabel(d) end
+                    end)
+                end
+            end)
+        end)
     end
 
     -- patch new GUIs the moment they appear (profile panels, leaderboards, etc.)
@@ -491925,25 +491957,22 @@ do
         end
     end
     _LP.PlayerGui.ChildAdded:Connect(function(child)
-        -- patch immediately + retry with delays (profile data may load async)
-        for _, delay in ipairs({0.25, 0.75, 1.5, 3}) do
+        for _, delay in ipairs({0, 0.25, 0.75, 1.5, 3, 5}) do
             task.delay(delay, function() pcall(function() _patchGuiStats(child) end) end)
         end
-        -- also watch for this GUI becoming enabled (Rivals may toggle .Enabled rather than add new child)
         pcall(function()
             child:GetPropertyChangedSignal("Enabled"):Connect(function()
                 if child.Enabled then
-                    task.delay(0.3, function() pcall(function() _patchGuiStats(child) end) end)
+                    task.delay(0.1, function() pcall(function() _patchGuiStats(child) end) end)
                 end
             end)
         end)
     end)
-    -- watch already-present GUIs for .Enabled toggles
     for _, gui in ipairs(_LP.PlayerGui:GetChildren()) do
         pcall(function()
             gui:GetPropertyChangedSignal("Enabled"):Connect(function()
                 if gui.Enabled then
-                    task.delay(0.3, function() pcall(function() _patchGuiStats(gui) end) end)
+                    task.delay(0.1, function() pcall(function() _patchGuiStats(gui) end) end)
                 end
             end)
         end)
@@ -491963,14 +491992,15 @@ do
         end
         if not _overheadBB or not _overheadBB.Parent then
             _overheadBB = Instance.new("BillboardGui")
-            _overheadBB.Name = "KamiOverhead"; _overheadBB.AlwaysOnTop = false
-            _overheadBB.Size = UDim2.new(0, 200, 0, 20); _overheadBB.StudsOffset = Vector3.new(0, 3.5, 0)
+            _overheadBB.Name = "KamiOverhead"; _overheadBB.AlwaysOnTop = true
+            _overheadBB.Size = UDim2.new(0, 300, 0, 28); _overheadBB.StudsOffset = Vector3.new(0, 6.5, 0)
             _overheadBB.Adornee = hrp; _overheadBB.Parent = hrp
             _overheadLbl = Instance.new("TextLabel", _overheadBB)
             _overheadLbl.Size = UDim2.new(1,0,1,0); _overheadLbl.BackgroundTransparency = 1
             _overheadLbl.TextColor3 = Color3.fromRGB(255, 215, 0)
             _overheadLbl.TextStrokeTransparency = 0; _overheadLbl.TextStrokeColor3 = Color3.new(0,0,0)
-            _overheadLbl.Font = Enum.Font.GothamBold; _overheadLbl.TextSize = 12
+            _overheadLbl.Font = Enum.Font.GothamBold; _overheadLbl.TextSize = 14
+            _overheadLbl.TextXAlignment = Enum.TextXAlignment.Center
         end
         local parts = {}
         if _ext["spoof_rank"]   then parts[#parts+1] = "ELO " .. tostring(_ext["spoof_rank_val"] or 1000) end
