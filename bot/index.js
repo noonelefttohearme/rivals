@@ -10,6 +10,7 @@ const HUB_NAME      = process.env.HUB_NAME || 'kamidere';
 const EMOJI_ID      = process.env.KAMIDERE_EMOJI_ID;
 const WORKINK_ID    = process.env.WORKINK_ID || '749665';
 const WORKINK_KEY   = process.env.WORKINK_API_KEY || '';
+const LOOTLINK_URL  = process.env.LOOTLINK_URL || 'https://lootdest.org/s?kkxY3uyp';
 
 const SCRIPT_ROLES = {
   rivals: '1562921775992541284',
@@ -456,15 +457,13 @@ client.on('interactionCreate', async interaction => {
       });
     }
 
-    const workinkUrl = `https://work.ink/${WORKINK_ID}/kamidere-free-key`;
-
     return interaction.editReply({
       embeds: [
         new EmbedBuilder()
           .setColor(COLORS.gold)
           .setTitle('🎁  Get Your Free Key')
           .setDescription(
-            `> **Step 1 —** Complete the checkpoint below.\n> **Step 2 —** Come back and click **Claim Key**.\n\n🔗  [Click here to complete](${workinkUrl})`
+            `> **Step 1 —** Complete the checkpoint below.\n> **Step 2 —** Come back and click **Claim Key**.\n\n🔗  [Click here to complete](${LOOTLINK_URL})`
           )
           .setFooter({ ...footer(), text: `${HUB_NAME} · complete all steps on the page` })
           .setTimestamp(),
@@ -511,7 +510,7 @@ client.on('interactionCreate', async interaction => {
               new EmbedBuilder()
                 .setColor(COLORS.err)
                 .setTitle('❌  Not Verified')
-                .setDescription(`> Checkpoint not completed yet.\n> [Complete it here](${workinkUrl}) then click **Claim Key** again.`)
+                .setDescription(`> Checkpoint not completed yet.\n> [Complete it here](${LOOTLINK_URL}) then click **Claim Key** again.`)
                 .setFooter(footer()),
             ],
           });
