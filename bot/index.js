@@ -455,7 +455,7 @@ client.on('interactionCreate', async interaction => {
       });
     }
 
-    const workinkUrl = `https://work.ink/${WORKINK_ID}/${userId}`;
+    const workinkUrl = `https://work.ink/${WORKINK_ID}/kamidere-free-key`;
 
     return interaction.editReply({
       embeds: [
@@ -490,36 +490,6 @@ client.on('interactionCreate', async interaction => {
             .setColor(COLORS.gold)
             .setTitle('🔑  Already Have a Key')
             .setDescription('> You already have a key. Use **Get Script** to grab your loader.')
-            .setFooter(footer()),
-        ],
-      });
-    }
-
-    // verify Workink HWID completion
-    let verified = false;
-    try {
-      const wiRes = await fetch(
-        `https://api.work.ink/${WORKINK_ID}/check?HWID=${userId}`,
-        { signal: AbortSignal.timeout(10000) }
-      );
-      const wiBody = await wiRes.json();
-      verified = wiBody.success === true;
-    } catch {
-      return interaction.editReply({
-        embeds: [errEmbed('Could not reach Workink. Try again in a moment.')],
-      });
-    }
-
-    if (!verified) {
-      const workinkUrl = `https://work.ink/${WORKINK_ID}/${userId}`;
-      return interaction.editReply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(COLORS.err)
-            .setTitle('❌  Not Verified')
-            .setDescription(
-              `> Workink checkpoint not completed yet.\n> [Complete it here](${workinkUrl}) then click **Claim Key** again.`
-            )
             .setFooter(footer()),
         ],
       });
