@@ -9,6 +9,7 @@ const SCRIPT_URL    = process.env.SCRIPT_URL;
 const HUB_NAME      = process.env.HUB_NAME || 'kamidere';
 const EMOJI_ID      = process.env.KAMIDERE_EMOJI_ID;
 const WORKINK_ID    = process.env.WORKINK_ID || '749665';
+const WORKINK_KEY   = process.env.WORKINK_API_KEY || '';
 
 const SCRIPT_ROLES = {
   rivals: '1562921775992541284',
@@ -493,6 +494,31 @@ client.on('interactionCreate', async interaction => {
             .setFooter(footer()),
         ],
       });
+    }
+
+    // verify workink completion
+    if (WORKINK_KEY) {
+      try {
+        const wiRes = await fetch(
+          `https://api.work.ink/v2/token/verify/${WORKINK_KEY}?hwid=${userId}`,
+          { signal: AbortSignal.timeout(10000) }
+        );
+        const wiBody = await wiRes.json();
+        if (!wiBody.success) {
+          const workinkUrl = `https://work.ink/${WORKINK_ID}/kamidere-free-key`;
+          return interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(COLORS.err)
+                .setTitle('❌  Not Verified')
+                .setDescription(`> Checkpoint not completed yet.\n> [Complete it here](${workinkUrl}) then click **Claim Key** again.`)
+                .setFooter(footer()),
+            ],
+          });
+        }
+      } catch {
+        return interaction.editReply({ embeds: [errEmbed('Could not reach Work.ink. Try again in a moment.')] });
+      }
     }
 
     // generate and bind free key
