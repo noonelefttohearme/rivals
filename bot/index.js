@@ -326,13 +326,13 @@ client.on('interactionCreate', async interaction => {
       return interaction.editReply({ embeds: [errEmbed('No key found. Redeem one first.')] });
     }
     const key = data.key;
-    const snippet = `getgenv().KAMI_KEY = "${key}"\nloadstring(game:HttpGet("https://raw.githubusercontent.com/noonelefttohearme/rivals/main/loader.lua"))()`;
+    const snippet = `getgenv().KAMI_KEY = "${key}"\nloadstring(game:HttpGet("https://raw.githubusercontent.com/noonelefttohearme/rivals/main/kamidere.lua"))()`;
     return interaction.editReply({
       embeds: [
         new EmbedBuilder()
           .setColor(COLORS.gold)
-          .setTitle('📄  Your Script')
-          .setDescription(`\`\`\`lua\n${snippet}\n\`\`\``)
+          .setTitle('📄  Your Script (Free)')
+          .setDescription(`> ⚠️  This is the **free version** of the script.\n\`\`\`lua\n${snippet}\n\`\`\``)
           .setFooter({ ...footer(), text: `${HUB_NAME} · paste into your executor` })
       ],
     });
