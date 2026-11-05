@@ -490925,17 +490925,11 @@ function UI.addTextBox(container, placeholderText, callback)
 end
 
 function UI.addColorPicker(container, labelText, defaultColor, callback)
-    local presets = {
-        {"Gold (Default)", Color3.fromRGB(215, 180, 65)},
-        {"Crimson",       Color3.fromRGB(225, 185, 60)},
-        {"Purple",        Color3.fromRGB(138, 43, 226)},
-        {"Blue",          Color3.fromRGB(30, 144, 255)},
-        {"Green",         Color3.fromRGB(46, 139, 87)},
-        {"Gold",          Color3.fromRGB(255, 215, 0)},
-        {"Monochrome",    Color3.fromRGB(180, 180, 180)}
-    }
-    local idx = 1
+    local color = defaultColor or Color3.fromRGB(255, 255, 255)
+    local hue, sat, val = Color3.toHSV(color)
+    local alpha = 1
 
+    -- row + swatch (inline in the section)
     local row = Instance.new("Frame")
     row.Name = "ColorPicker_" .. labelText
     row.Size = UDim2.new(1, 0, 0, 26)
@@ -490943,7 +490937,7 @@ function UI.addColorPicker(container, labelText, defaultColor, callback)
     row.Parent = container
 
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0.6, 0, 1, 0)
+    label.Size = UDim2.new(1, -52, 1, 0)
     label.BackgroundTransparency = 1
     label.Text = labelText
     if UI_FONT then pcall(function() label.FontFace = UI_FONT end) end
@@ -490952,28 +490946,316 @@ function UI.addColorPicker(container, labelText, defaultColor, callback)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = row
 
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.38, 0, 1, 0)
-    btn.Position = UDim2.new(0.62, 0, 0, 0)
-    btn.BackgroundColor3 = presets[idx][2]
-    btn.Text = presets[idx][1]
-    if UI_FONT then pcall(function() btn.FontFace = UI_FONT end) end
-    btn.TextSize = 10
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.Parent = row
+    local swatch = Instance.new("TextButton")
+    swatch.Size = UDim2.new(0, 42, 0, 16)
+    swatch.Position = UDim2.new(1, -44, 0.5, -8)
+    swatch.BackgroundColor3 = color
+    swatch.Text = ""
+    swatch.AutoButtonColor = false
+    swatch.Parent = row
+    local swatchCorner = Instance.new("UICorner"); swatchCorner.CornerRadius = UDim.new(0, 3); swatchCorner.Parent = swatch
+    local swatchStroke = Instance.new("UIStroke"); swatchStroke.Color = COLORS.PanelBorder; swatchStroke.Thickness = 1; swatchStroke.Parent = swatch
 
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 0)
-    corner.Parent = btn
+    -- -------- POPUP --------
+    local popup = Instance.new("Frame")
+    popup.Name = "ColorPickerPopup_" .. labelText
+    popup.Size = UDim2.new(0, 232, 0, 242)
+    popup.BackgroundColor3 = COLORS.PanelBg
+    popup.BorderSizePixel = 0
+    popup.Visible = false
+    popup.ZIndex = 500
+    popup.Parent = screenGui
+    local popupCorner = Instance.new("UICorner"); popupCorner.CornerRadius = UDim.new(0, 4); popupCorner.Parent = popup
+    local popupStroke = Instance.new("UIStroke"); popupStroke.Color = COLORS.PanelBorder; popupStroke.Thickness = 1; popupStroke.Parent = popup
 
-    btn.MouseButton1Click:Connect(function()
-        idx = (idx % #presets) + 1
-        btn.BackgroundColor3 = presets[idx][2]
-        btn.Text = presets[idx][1]
-        if callback then callback(presets[idx][2]) end
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -36, 0, 18)
+    title.Position = UDim2.new(0, 8, 0, 4)
+    title.BackgroundTransparency = 1
+    title.Text = labelText:lower()
+    title.TextColor3 = COLORS.TextSecondary
+    title.TextSize = 11
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    if UI_FONT then pcall(function() title.FontFace = UI_FONT end) end
+    title.ZIndex = 501
+    title.Parent = popup
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, 16, 0, 16)
+    closeBtn.Position = UDim2.new(1, -22, 0, 5)
+    closeBtn.BackgroundTransparency = 1
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = COLORS.TextMuted
+    closeBtn.TextSize = 12
+    closeBtn.ZIndex = 510
+    if UI_FONT then pcall(function() closeBtn.FontFace = UI_FONT end) end
+    closeBtn.Parent = popup
+
+    -- SV square
+    local svFrame = Instance.new("Frame")
+    svFrame.Size = UDim2.new(0, 160, 0, 160)
+    svFrame.Position = UDim2.new(0, 8, 0, 26)
+    svFrame.BackgroundColor3 = Color3.fromHSV(hue, 1, 1)
+    svFrame.BorderSizePixel = 0
+    svFrame.ZIndex = 502
+    svFrame.Parent = popup
+    local svCorner = Instance.new("UICorner"); svCorner.CornerRadius = UDim.new(0, 2); svCorner.Parent = svFrame
+
+    local whiteOv = Instance.new("Frame")
+    whiteOv.Size = UDim2.new(1, 0, 1, 0)
+    whiteOv.BackgroundColor3 = Color3.new(1, 1, 1)
+    whiteOv.BorderSizePixel = 0
+    whiteOv.ZIndex = 503
+    whiteOv.Parent = svFrame
+    local whiteCorner = Instance.new("UICorner"); whiteCorner.CornerRadius = UDim.new(0, 2); whiteCorner.Parent = whiteOv
+    local whiteGrad = Instance.new("UIGradient")
+    whiteGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1),
+        NumberSequenceKeypoint.new(1, 0),
+    })
+    whiteGrad.Rotation = 0
+    whiteGrad.Parent = whiteOv
+
+    local blackOv = Instance.new("Frame")
+    blackOv.Size = UDim2.new(1, 0, 1, 0)
+    blackOv.BackgroundColor3 = Color3.new(0, 0, 0)
+    blackOv.BorderSizePixel = 0
+    blackOv.ZIndex = 504
+    blackOv.Parent = svFrame
+    local blackCorner = Instance.new("UICorner"); blackCorner.CornerRadius = UDim.new(0, 2); blackCorner.Parent = blackOv
+    local blackGrad = Instance.new("UIGradient")
+    blackGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1),
+        NumberSequenceKeypoint.new(1, 0),
+    })
+    blackGrad.Rotation = 90
+    blackGrad.Parent = blackOv
+
+    local svCursor = Instance.new("TextLabel")
+    svCursor.Size = UDim2.new(0, 12, 0, 12)
+    svCursor.AnchorPoint = Vector2.new(0.5, 0.5)
+    svCursor.BackgroundTransparency = 1
+    svCursor.Text = "X"
+    svCursor.TextColor3 = Color3.new(1, 1, 1)
+    svCursor.TextStrokeTransparency = 0
+    svCursor.TextSize = 12
+    svCursor.Font = Enum.Font.GothamBold
+    svCursor.ZIndex = 507
+    svCursor.Parent = svFrame
+
+    -- Hue strip
+    local hueFrame = Instance.new("Frame")
+    hueFrame.Size = UDim2.new(0, 14, 0, 160)
+    hueFrame.Position = UDim2.new(0, 178, 0, 26)
+    hueFrame.BackgroundColor3 = Color3.new(1, 1, 1)
+    hueFrame.BorderSizePixel = 0
+    hueFrame.ZIndex = 502
+    hueFrame.Parent = popup
+    local hueCorner = Instance.new("UICorner"); hueCorner.CornerRadius = UDim.new(0, 2); hueCorner.Parent = hueFrame
+    local hueGrad = Instance.new("UIGradient")
+    hueGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.000, Color3.fromRGB(255,   0,   0)),
+        ColorSequenceKeypoint.new(0.166, Color3.fromRGB(255, 255,   0)),
+        ColorSequenceKeypoint.new(0.333, Color3.fromRGB(  0, 255,   0)),
+        ColorSequenceKeypoint.new(0.500, Color3.fromRGB(  0, 255, 255)),
+        ColorSequenceKeypoint.new(0.666, Color3.fromRGB(  0,   0, 255)),
+        ColorSequenceKeypoint.new(0.833, Color3.fromRGB(255,   0, 255)),
+        ColorSequenceKeypoint.new(1.000, Color3.fromRGB(255,   0,   0)),
+    })
+    hueGrad.Rotation = 90
+    hueGrad.Parent = hueFrame
+
+    local hueCursor = Instance.new("Frame")
+    hueCursor.Size = UDim2.new(1, 4, 0, 3)
+    hueCursor.AnchorPoint = Vector2.new(0.5, 0.5)
+    hueCursor.BackgroundColor3 = Color3.new(1, 1, 1)
+    hueCursor.BorderSizePixel = 0
+    hueCursor.ZIndex = 508
+    hueCursor.Parent = hueFrame
+
+    -- Alpha strip (black backdrop + colored gradient to transparent downwards)
+    local alphaFrame = Instance.new("Frame")
+    alphaFrame.Size = UDim2.new(0, 14, 0, 160)
+    alphaFrame.Position = UDim2.new(0, 200, 0, 26)
+    alphaFrame.BackgroundColor3 = Color3.fromRGB(28, 26, 22)
+    alphaFrame.BorderSizePixel = 0
+    alphaFrame.ZIndex = 502
+    alphaFrame.Parent = popup
+    local alphaCorner = Instance.new("UICorner"); alphaCorner.CornerRadius = UDim.new(0, 2); alphaCorner.Parent = alphaFrame
+
+    local alphaOv = Instance.new("Frame")
+    alphaOv.Size = UDim2.new(1, 0, 1, 0)
+    alphaOv.BackgroundColor3 = color
+    alphaOv.BorderSizePixel = 0
+    alphaOv.ZIndex = 503
+    alphaOv.Parent = alphaFrame
+    local alphaOvCorner = Instance.new("UICorner"); alphaOvCorner.CornerRadius = UDim.new(0, 2); alphaOvCorner.Parent = alphaOv
+    local alphaGrad = Instance.new("UIGradient")
+    alphaGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    alphaGrad.Rotation = 90
+    alphaGrad.Parent = alphaOv
+
+    local alphaCursor = Instance.new("Frame")
+    alphaCursor.Size = UDim2.new(1, 4, 0, 3)
+    alphaCursor.AnchorPoint = Vector2.new(0.5, 0.5)
+    alphaCursor.BackgroundColor3 = Color3.new(1, 1, 1)
+    alphaCursor.BorderSizePixel = 0
+    alphaCursor.ZIndex = 508
+    alphaCursor.Parent = alphaFrame
+
+    -- Hex input
+    local hexBox = Instance.new("TextBox")
+    hexBox.Size = UDim2.new(0, 100, 0, 20)
+    hexBox.Position = UDim2.new(0, 8, 0, 196)
+    hexBox.BackgroundColor3 = COLORS.DropdownBg
+    hexBox.TextColor3 = COLORS.TextPrimary
+    hexBox.Text = ""
+    hexBox.TextSize = 11
+    hexBox.ClearTextOnFocus = false
+    if UI_FONT then pcall(function() hexBox.FontFace = UI_FONT end) end
+    hexBox.ZIndex = 505
+    hexBox.Parent = popup
+    local hexCorner = Instance.new("UICorner"); hexCorner.CornerRadius = UDim.new(0, 2); hexCorner.Parent = hexBox
+    local hexStroke = Instance.new("UIStroke"); hexStroke.Color = COLORS.DropdownBorder; hexStroke.Thickness = 1; hexStroke.Parent = hexBox
+
+    -- RGB input
+    local rgbBox = Instance.new("TextBox")
+    rgbBox.Size = UDim2.new(0, 112, 0, 20)
+    rgbBox.Position = UDim2.new(0, 112, 0, 196)
+    rgbBox.BackgroundColor3 = COLORS.DropdownBg
+    rgbBox.TextColor3 = COLORS.TextPrimary
+    rgbBox.Text = ""
+    rgbBox.TextSize = 11
+    rgbBox.ClearTextOnFocus = false
+    if UI_FONT then pcall(function() rgbBox.FontFace = UI_FONT end) end
+    rgbBox.ZIndex = 505
+    rgbBox.Parent = popup
+    local rgbCorner = Instance.new("UICorner"); rgbCorner.CornerRadius = UDim.new(0, 2); rgbCorner.Parent = rgbBox
+    local rgbStroke = Instance.new("UIStroke"); rgbStroke.Color = COLORS.DropdownBorder; rgbStroke.Thickness = 1; rgbStroke.Parent = rgbBox
+
+    -- -------- REFRESH --------
+    local function refresh(fire)
+        color = Color3.fromHSV(hue, sat, val)
+        swatch.BackgroundColor3 = color
+        svFrame.BackgroundColor3 = Color3.fromHSV(hue, 1, 1)
+        svCursor.Position = UDim2.new(sat, 0, 1 - val, 0)
+        hueCursor.Position = UDim2.new(0.5, 0, hue, 0)
+        alphaOv.BackgroundColor3 = color
+        alphaCursor.Position = UDim2.new(0.5, 0, 1 - alpha, 0)
+        hexBox.Text = string.format("#%02X%02X%02X",
+            math.floor(color.R * 255 + 0.5),
+            math.floor(color.G * 255 + 0.5),
+            math.floor(color.B * 255 + 0.5))
+        rgbBox.Text = string.format("%d, %d, %d",
+            math.floor(color.R * 255 + 0.5),
+            math.floor(color.G * 255 + 0.5),
+            math.floor(color.B * 255 + 0.5))
+        if fire and callback then pcall(callback, color, alpha) end
+    end
+
+    -- -------- DRAG --------
+    local function hookDrag(frame, onMove)
+        local dragging = false
+        frame.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                onMove(input.Position)
+            end
+        end)
+        frame.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                onMove(input.Position)
+            end
+        end)
+    end
+
+    hookDrag(svFrame, function(p)
+        local a, s = svFrame.AbsolutePosition, svFrame.AbsoluteSize
+        sat = math.clamp((p.X - a.X) / s.X, 0, 1)
+        val = 1 - math.clamp((p.Y - a.Y) / s.Y, 0, 1)
+        refresh(true)
+    end)
+    hookDrag(hueFrame, function(p)
+        local a, s = hueFrame.AbsolutePosition, hueFrame.AbsoluteSize
+        hue = math.clamp((p.Y - a.Y) / s.Y, 0, 0.999)
+        refresh(true)
+    end)
+    hookDrag(alphaFrame, function(p)
+        local a, s = alphaFrame.AbsolutePosition, alphaFrame.AbsoluteSize
+        alpha = math.clamp(1 - (p.Y - a.Y) / s.Y, 0, 1)
+        refresh(true)
     end)
 
-    return btn
+    hexBox.FocusLost:Connect(function()
+        local t = hexBox.Text:gsub("[^0-9A-Fa-f]", "")
+        if #t == 6 then
+            local r = tonumber(t:sub(1, 2), 16)
+            local g = tonumber(t:sub(3, 4), 16)
+            local b = tonumber(t:sub(5, 6), 16)
+            if r and g and b then
+                hue, sat, val = Color3.toHSV(Color3.fromRGB(r, g, b))
+                refresh(true); return
+            end
+        end
+        refresh(false)
+    end)
+
+    rgbBox.FocusLost:Connect(function()
+        local parts = {}
+        for n in rgbBox.Text:gmatch("%d+") do parts[#parts + 1] = tonumber(n) end
+        if #parts >= 3 then
+            local r = math.clamp(parts[1], 0, 255)
+            local g = math.clamp(parts[2], 0, 255)
+            local b = math.clamp(parts[3], 0, 255)
+            hue, sat, val = Color3.toHSV(Color3.fromRGB(r, g, b))
+            refresh(true); return
+        end
+        refresh(false)
+    end)
+
+    -- -------- OPEN / CLOSE --------
+    local function anchor()
+        local sa, ss = swatch.AbsolutePosition, swatch.AbsoluteSize
+        local pw = popup.AbsoluteSize.X > 0 and popup.AbsoluteSize.X or 232
+        local vp = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+        local x = math.clamp(sa.X + ss.X - pw, 4, vp.X - pw - 4)
+        local y = math.clamp(sa.Y + ss.Y + 4, 4, vp.Y - 246)
+        popup.Position = UDim2.new(0, x, 0, y)
+    end
+    swatch.MouseButton1Click:Connect(function()
+        if popup.Visible then popup.Visible = false
+        else anchor(); popup.Visible = true end
+    end)
+    closeBtn.MouseButton1Click:Connect(function() popup.Visible = false end)
+
+    UserInputService.InputBegan:Connect(function(input, gp)
+        if gp or not popup.Visible then return end
+        if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
+        local mx, my = input.Position.X, input.Position.Y
+        local pa, ps = popup.AbsolutePosition, popup.AbsoluteSize
+        local sa, ss = swatch.AbsolutePosition, swatch.AbsoluteSize
+        local inPopup  = mx >= pa.X and mx <= pa.X + ps.X and my >= pa.Y and my <= pa.Y + ps.Y
+        local inSwatch = mx >= sa.X and mx <= sa.X + ss.X and my >= sa.Y and my <= sa.Y + ss.Y
+        if not inPopup and not inSwatch then popup.Visible = false end
+    end)
+
+    refresh(false)
+
+    return {
+        setColor = function(c) hue, sat, val = Color3.toHSV(c); refresh(false) end,
+        getColor = function() return color end,
+        setAlpha = function(a) alpha = math.clamp(a, 0, 1); refresh(false) end,
+        getAlpha = function() return alpha end,
+        Instance = swatch,
+    }
 end
 
 local FONT_APPLIED = {}
