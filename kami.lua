@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-05.r3"
+    local KAMI_BUILD = "2026-11-05.r4"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -491871,6 +491871,8 @@ end)
     -- EFFECTS[...] below to add, rename, or swap entries.
     -- ============================================================
     task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: hit-effects+sounds starting")
         task.wait(3) -- let the auto-populate pass finish first
 
         local TweenService_HX  = game:GetService("TweenService")
@@ -492249,6 +492251,9 @@ end)
 
         for _, p in ipairs(Players:GetPlayers()) do bindPlayer(p) end
         Players.PlayerAdded:Connect(bindPlayer)
+        print("[kamidere] addon: hit-effects+sounds section built")
+        end) -- pcall
+        if not __ok then warn("[kamidere] HIT EFFECTS/SOUNDS ERROR: " .. tostring(__err)) end
     end)
 
     -- ============================================================
@@ -492258,6 +492263,8 @@ end)
     -- row rewrite gets overwritten next tick. Full restore on off.
     -- ============================================================
     task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: infinite-dash starting")
         task.wait(3)
 
         local RS_DX = game:GetService("ReplicatedStorage")
@@ -492408,6 +492415,9 @@ end)
             if not dx.enabled then return end
             apply()
         end)
+        print("[kamidere] addon: infinite-dash section built")
+        end) -- pcall
+        if not __ok then warn("[kamidere] INFINITE DASH ERROR: " .. tostring(__err)) end
     end)
 
     -- ============================================================
@@ -492419,6 +492429,8 @@ end)
     -- not expose one.
     -- ============================================================
     task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: weapons starting")
         task.wait(3)
 
         local RS_WX = game:GetService("ReplicatedStorage")
@@ -492531,6 +492543,9 @@ end)
         RunService.Heartbeat:Connect(function()
             if wx.no_recoil or wx.no_spread or wx.no_drop then apply() end
         end)
+        print("[kamidere] addon: weapons section built")
+        end) -- pcall
+        if not __ok then warn("[kamidere] WEAPONS ERROR: " .. tostring(__err)) end
     end)
 
     -- ============================================================
@@ -492546,6 +492561,8 @@ end)
     -- are honored first when present.
     -- ============================================================
     task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: viewmodel starting")
         task.wait(2)
 
         local Cam = workspace.CurrentCamera
@@ -492758,6 +492775,9 @@ end)
             acc = acc + dt
             if acc >= 0.33 then acc = 0; sweep() end
         end)
+        print("[kamidere] addon: viewmodel section built")
+        end) -- pcall
+        if not __ok then warn("[kamidere] VIEW MODEL ERROR: " .. tostring(__err)) end
     end)
 
     -- Remove the stats/info HUD created by the VM bytecode.
