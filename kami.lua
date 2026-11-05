@@ -492180,6 +492180,165 @@ end)
         Players.PlayerAdded:Connect(bindPlayer)
     end)
 
+    -- ============================================================
+    -- [INFINITE DASH] - Rivals ItemLibrary cooldown clamp
+    -- Patches ReplicatedStorage.Modules.ItemLibrary items with
+    -- DashCooldown field. Held per-frame so a library reload /
+    -- row rewrite gets overwritten next tick. Full restore on off.
+    -- ============================================================
+    task.spawn(function()
+        task.wait(3)
+
+        local RS_DX = game:GetService("ReplicatedStorage")
+
+        local dx = {
+            enabled          = false,
+            cooldown         = 0.05,
+            speed_override   = false,
+            speed_value      = 100,
+            dur_override     = false,
+            dur_value        = 0.30,
+            toggle_key       = Enum.KeyCode.F8,
+        }
+
+        -- ---- resolve ItemLibrary once, async with retry ----
+        local items
+        local function tryResolve()
+            local ok, result = pcall(function()
+                local mods = RS_DX:FindFirstChild("Modules")
+                if not mods then return nil end
+                local lib = mods:FindFirstChild("ItemLibrary")
+                if not lib then return nil end
+                local IL = require(lib)
+                return IL.Items or IL.items or IL
+            end)
+            if ok then items = result end
+        end
+        for _ = 1, 10 do
+            tryResolve()
+            if items then break end
+            task.wait(1)
+        end
+        if not items then
+            warn("[kami/dash] ItemLibrary not found; dash addon idle")
+            return
+        end
+
+        -- ---- state / snapshot ----
+        local saved = {}
+
+        local function rows()
+            local out = {}
+            for name, it in pairs(items) do
+                if type(it) == "table" and type(it.DashCooldown) == "number" then
+                    out[#out + 1] = { name = name, row = it }
+                end
+            end
+            return out
+        end
+
+        local function stash(row, field)
+            saved[row] = saved[row] or {}
+            if saved[row][field] == nil then
+                saved[row][field] = row[field]
+            end
+        end
+
+        local function apply()
+            local n = 0
+            for _, e in ipairs(rows()) do
+                local row = e.row
+                -- Clamp, don't raise: a naturally faster dash keeps its rate.
+                if row.DashCooldown > dx.cooldown then
+                    stash(row, "DashCooldown")
+                    row.DashCooldown = dx.cooldown
+                end
+                if dx.speed_override and row.DashSpeed ~= dx.speed_value then
+                    stash(row, "DashSpeed")
+                    row.DashSpeed = dx.speed_value
+                end
+                if dx.dur_override and row.DashDuration ~= dx.dur_value then
+                    stash(row, "DashDuration")
+                    row.DashDuration = dx.dur_value
+                end
+                n = n + 1
+            end
+            return n
+        end
+
+        local function restore()
+            for row, fields in pairs(saved) do
+                for field, value in pairs(fields) do
+                    pcall(function() row[field] = value end)
+                end
+            end
+            saved = {}
+        end
+
+        -- ---- UI ----
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
+
+        local dxSec = UI.createSection(miscTab, "Infinite Dash", "left")
+        local dxToggle = UI.addToggle(dxSec, "Infinite Dash Enabled", false, function(v)
+            dx.enabled = v
+            if v then
+                apply()
+            else
+                restore()
+            end
+        end)
+        UI.addSlider(dxSec, "Cooldown Floor", 0.00, 2.00, 0.05, true, function(v) dx.cooldown = v end)
+        UI.addToggle(dxSec, "Override Dash Speed", false, function(v)
+            dx.speed_override = v
+            if not v then
+                for row, fields in pairs(saved) do
+                    if fields.DashSpeed ~= nil then
+                        pcall(function() row.DashSpeed = fields.DashSpeed end)
+                        fields.DashSpeed = nil
+                    end
+                end
+            end
+        end)
+        UI.addSlider(dxSec, "Dash Speed", 10, 500, 100, true, function(v) dx.speed_value = v end)
+        UI.addToggle(dxSec, "Override Dash Duration", false, function(v)
+            dx.dur_override = v
+            if not v then
+                for row, fields in pairs(saved) do
+                    if fields.DashDuration ~= nil then
+                        pcall(function() row.DashDuration = fields.DashDuration end)
+                        fields.DashDuration = nil
+                    end
+                end
+            end
+        end)
+        UI.addSlider(dxSec, "Dash Duration", 0.05, 2.00, 0.30, true, function(v) dx.dur_value = v end)
+        UI.addKeybind(dxSec, "Toggle Dash Key", dx.toggle_key, function(k)
+            dx.toggle_key = k
+        end)
+        UI.addButton(dxSec, "Restore Now", function()
+            restore()
+            if dxToggle and dxToggle.setState then dxToggle.setState(false) end
+            dx.enabled = false
+        end)
+
+        -- ---- keybind listener ----
+        UserInputService.InputBegan:Connect(function(input, gp)
+            if gp then return end
+            if input.KeyCode == dx.toggle_key then
+                dx.enabled = not dx.enabled
+                if dxToggle and dxToggle.setState then dxToggle.setState(dx.enabled) end
+                if dx.enabled then apply() else restore() end
+            end
+        end)
+
+        -- ---- per-frame hold ----
+        RunService.Heartbeat:Connect(function()
+            if not dx.enabled then return end
+            apply()
+        end)
+    end)
+
     -- Remove the stats/info HUD created by the VM bytecode.
     -- We identify it by requiring BOTH an exact "health" label AND an exact
     -- "damage ratio" label as siblings under the same Frame — this combo is
