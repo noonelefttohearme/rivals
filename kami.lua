@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-05.r11"
+    local KAMI_BUILD = "2026-11-05.r12"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -492291,6 +492291,153 @@ end)
         print("[kamidere] addon: weapons section built")
         end) -- pcall
         if not __ok then warn("[kamidere] WEAPONS ERROR: " .. tostring(__err)) end
+    end)
+
+    -- ============================================================
+    -- [HIT EFFECTS + HIT SOUNDS] - explicit bind to UE's native Options
+    -- Scans getgenv().Toggles / getgenv().Options for every hit_effects_*
+    -- and hit_sounds_* key the VM registers at runtime, builds dedicated
+    -- sections wired through _activate so flipping anything reaches the
+    -- VM's own effect pipeline. If the VM registered nothing, nothing
+    -- shows up (we log what we found so you can see).
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: hit-effects+sounds bind starting")
+        task.wait(4) -- let the VM finish building its Options table
+
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
+
+        local T = getgenv().Toggles or {}
+        local O = getgenv().Options or {}
+
+        local function scan(prefix)
+            local toggles, options = {}, {}
+            for k, obj in pairs(T) do
+                if type(k) == "string" and type(obj) == "table" and k:sub(1, #prefix) == prefix then
+                    toggles[#toggles + 1] = k
+                end
+            end
+            for k, obj in pairs(O) do
+                if type(k) == "string" and type(obj) == "table" and k:sub(1, #prefix) == prefix then
+                    options[#options + 1] = k
+                end
+            end
+            table.sort(toggles); table.sort(options)
+            return toggles, options
+        end
+
+        local effT, effO = scan("hit_effects")
+        local sndT, sndO = scan("hit_sounds")
+
+        print(("[kamidere] UE hit_effects_* found: %d toggles, %d options"):format(#effT, #effO))
+        print(("[kamidere] UE hit_sounds_*  found: %d toggles, %d options"):format(#sndT, #sndO))
+
+        if #effT + #effO + #sndT + #sndO == 0 then
+            warn("[kamidere] UE registered no hit_effects_* / hit_sounds_* options this session")
+            return
+        end
+
+        local function labelOf(k)
+            local s = k:gsub("^hit_effects_?", ""):gsub("^hit_sounds_?", ""):gsub("_", " ")
+            s = s:gsub("(%l)(%u)", function(a, b) return a .. " " .. b end)
+            s = s:gsub("(%a)([%w]*)", function(a, b) return a:upper() .. b:lower() end)
+            return s ~= "" and s or k
+        end
+
+        local function toColor3(v)
+            if typeof(v) == "Color3" then return v end
+            if type(v) == "table" and v.R and v.G and v.B then
+                return Color3.new(tonumber(v.R) or 0, tonumber(v.G) or 0, tonumber(v.B) or 0)
+            end
+            return Color3.fromRGB(255, 255, 255)
+        end
+
+        local function renderInto(container, toggleKeys, optionKeys)
+            for _, k in ipairs(toggleKeys) do
+                local obj = T[k]
+                UI.addToggle(container, labelOf(k), obj.Value == true, function(v)
+                    _activate(k, "Toggles", v)
+                end)
+            end
+            -- group color_N inline
+            local colGroups, skip = {}, {}
+            for _, k in ipairs(optionKeys) do
+                local base, idx = k:lower():match("^(.-)col_?(%d+)$")
+                if base and idx then
+                    colGroups[base] = colGroups[base] or {}
+                    table.insert(colGroups[base], { key = k, idx = tonumber(idx) })
+                end
+            end
+            for base, members in pairs(colGroups) do
+                if #members >= 2 then
+                    table.sort(members, function(a, b) return a.idx < b.idx end)
+                    for i = 2, #members do skip[members[i].key] = true end
+                else
+                    colGroups[base] = nil
+                end
+            end
+            local emittedGroup = {}
+            for _, k in ipairs(optionKeys) do
+                if skip[k] then
+                    -- skip, already rendered as part of a group
+                elseif true then
+                    local obj = O[k]
+                    local base, idx = k:lower():match("^(.-)col_?(%d+)$")
+                    if base and idx and colGroups[base] and not emittedGroup[base] then
+                        emittedGroup[base] = true
+                        local entries = {}
+                        for _, m in ipairs(colGroups[base]) do
+                            local mo = O[m.key]
+                            if mo then
+                                local mk = m.key
+                                table.insert(entries, {
+                                    initial  = toColor3(mo.Value),
+                                    callback = function(c) _activate(mk, "Options", c) end,
+                                })
+                            end
+                        end
+                        UI.addColorGroup(container, "Colors", entries)
+                    elseif type(obj.Values) == "table" and #obj.Values > 0 then
+                        local sv = {}
+                        for _, x in ipairs(obj.Values) do if type(x) == "string" then sv[#sv + 1] = x end end
+                        if #sv > 0 then
+                            UI.addDropdown(container, labelOf(k), sv,
+                                type(obj.Value) == "string" and obj.Value or sv[1],
+                                function(v) _activate(k, "Options", v) end)
+                        end
+                    elseif typeof(obj.Value) == "Color3"
+                        or (type(obj.Value) == "table" and obj.Value.R and obj.Value.G and obj.Value.B)
+                    then
+                        UI.addColorPicker(container, labelOf(k), toColor3(obj.Value), function(c)
+                            _activate(k, "Options", c)
+                        end)
+                    elseif tonumber(obj.Min) or tonumber(obj.Max) or tonumber(obj.Value) then
+                        local mn = tonumber(obj.Min) or 0
+                        local mx = tonumber(obj.Max) or 100
+                        local cur = tonumber(obj.Value) or mn
+                        local fl = (mx - math.floor(mx)) > 0 or (mn - math.floor(mn)) > 0
+                        UI.addSlider(container, labelOf(k), mn, mx, cur, fl, function(v)
+                            _activate(k, "Options", v)
+                        end)
+                    end
+                end
+            end
+        end
+
+        if #effT + #effO > 0 then
+            local effSec = UI.createSection(miscTab, "Hit Effects", "left")
+            renderInto(effSec, effT, effO)
+        end
+        if #sndT + #sndO > 0 then
+            local sndSec = UI.createSection(miscTab, "Hit Sounds", "right")
+            renderInto(sndSec, sndT, sndO)
+        end
+
+        print("[kamidere] addon: hit-effects+sounds sections built")
+        end) -- pcall
+        if not __ok then warn("[kamidere] HIT bind ERROR: " .. tostring(__err)) end
     end)
 
     -- ============================================================
