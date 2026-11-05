@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-05.r5"
+    local KAMI_BUILD = "2026-11-05.r6"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -491590,9 +491590,21 @@ end)
 
     local _menuOpen = true
 
-    -- Custom cursor
-    local _curArrow, _curShadow
-    pcall(function()
+    -- Custom cursor DISABLED: operator preferred the stock roblox cursor.
+    -- The old custom pixel-art cursor set MouseIconEnabled = false every
+    -- frame via RenderStepped, which fought any manual re-enable from the
+    -- dev console. Force it back on, keep it on, and skip the whole
+    -- custom-cursor builder below.
+    local _curArrow, _curShadow -- kept as nils so later nil-checks pass
+    pcall(function() UserInputService.MouseIconEnabled = true end)
+    pcall(function() UserInputService.MouseIcon = "" end)
+    task.spawn(function()
+        for _ = 1, 20 do
+            pcall(function() UserInputService.MouseIconEnabled = true end)
+            task.wait(0.5)
+        end
+    end)
+    if false then pcall(function()
         local _curGui = Instance.new("ScreenGui")
         _curGui.Name = "KamidereCursor"
         _curGui.DisplayOrder = 99999; _curGui.IgnoreGuiInset = true
@@ -491676,7 +491688,7 @@ end)
         end
         RunService.RenderStepped:Connect(_updateCursor)
         RunService.Heartbeat:Connect(_updateCursor)
-    end)
+    end) end -- end of `if false then pcall(function() ... end) end` dead-code block
 
     local function _showMenu(visible)
         _menuOpen = visible
