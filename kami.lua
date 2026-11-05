@@ -492462,6 +492462,178 @@ end)
         end)
     end)
 
+    -- ============================================================
+    -- [VIEW MODEL - Valorant Arms (Jett)]
+    -- Repaints the equipped Rivals viewmodel arms to Jett's palette:
+    -- teal gauntlet/gloves, pale forearm skin, white accent trim.
+    -- Walks workspace.CurrentCamera descendants, matches arm-named
+    -- BaseParts, stores originals, reapplies on weapon switch.
+    -- ============================================================
+    task.spawn(function()
+        task.wait(2)
+
+        local Cam = workspace.CurrentCamera
+        if not Cam then
+            local t0 = os.clock()
+            while not workspace.CurrentCamera and os.clock() - t0 < 10 do task.wait(0.25) end
+            Cam = workspace.CurrentCamera
+        end
+        if not Cam then return end
+
+        local JETT = {
+            Gauntlet = Color3.fromRGB( 60, 200, 215), -- teal gloves / sleeve
+            Trim     = Color3.fromRGB(240, 240, 245), -- white detailing
+            Skin     = Color3.fromRGB(246, 220, 200), -- pale forearm
+            Accent   = Color3.fromRGB( 35, 100, 115), -- dark teal shadow
+        }
+
+        local vm = {
+            enabled = false,
+            tint    = JETT.Gauntlet,
+            saved   = {}, -- part -> { Color, Material, Transparency, TextureID }
+        }
+
+        local function classify(name)
+            local n = string.lower(name or "")
+            if n:find("forearm") or n:find("skin") then return "skin" end
+            if n:find("glove") or n:find("sleeve") or n:find("gauntlet") or n:find("wrist") then return "gauntlet" end
+            if n:find("hand") then return "gauntlet" end
+            if n:find("arm") then
+                -- "arm" could mean upper arm (gauntlet) or forearm (skin) - default gauntlet
+                return "gauntlet"
+            end
+            if n:find("trim") or n:find("accent") or n:find("stripe") then return "trim" end
+            return nil
+        end
+
+        local function isArmPart(inst)
+            if not inst:IsA("BasePart") then return false end
+            local parent = inst.Parent
+            -- Must be under something that looks like a viewmodel: model whose name
+            -- contains "ViewModel", "VM", or lives under the camera.
+            if not parent then return false end
+            local p = inst
+            for _ = 1, 6 do
+                if not p or p == workspace then return false end
+                if p == Cam then return true end
+                p = p.Parent
+            end
+            return false
+        end
+
+        local function paint(part, kind)
+            if vm.saved[part] then return end
+            vm.saved[part] = {
+                Color        = part.Color,
+                Material     = part.Material,
+                Transparency = part.Transparency,
+                TextureID    = part:IsA("MeshPart") and part.TextureID or nil,
+            }
+            local col
+            if     kind == "gauntlet" then col = vm.tint
+            elseif kind == "trim"     then col = JETT.Trim
+            elseif kind == "skin"     then col = JETT.Skin
+            else                           col = vm.tint end
+            pcall(function()
+                part.Color        = col
+                part.Material     = (kind == "skin") and Enum.Material.Plastic or Enum.Material.SmoothPlastic
+                part.Transparency = 0
+                if part:IsA("MeshPart") then part.TextureID = "" end
+            end)
+        end
+
+        local function restorePart(part)
+            local s = vm.saved[part]
+            if not s then return end
+            vm.saved[part] = nil
+            pcall(function()
+                part.Color        = s.Color
+                part.Material     = s.Material
+                part.Transparency = s.Transparency
+                if part:IsA("MeshPart") and s.TextureID ~= nil then
+                    part.TextureID = s.TextureID
+                end
+            end)
+        end
+
+        local function restoreAll()
+            for part in pairs(vm.saved) do restorePart(part) end
+            vm.saved = {}
+        end
+
+        local function sweep()
+            if not vm.enabled then return end
+            for _, d in ipairs(Cam:GetDescendants()) do
+                if d:IsA("BasePart") then
+                    local kind = classify(d.Name)
+                    if kind and isArmPart(d) then
+                        paint(d, kind)
+                    end
+                end
+            end
+        end
+
+        -- ---- UI ----
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
+
+        local vmSec = UI.createSection(miscTab, "View Model", "right")
+        local vmToggle = UI.addToggle(vmSec, "Valorant Arms (Jett)", false, function(v)
+            vm.enabled = v
+            if v then sweep() else restoreAll() end
+        end)
+        UI.addColorPicker(vmSec, "Gauntlet Tint", vm.tint, function(c)
+            vm.tint = c
+            if vm.enabled then
+                for part, s in pairs(vm.saved) do
+                    -- recolor only parts we painted as gauntlet (not trim / skin)
+                    local kind = classify(part.Name)
+                    if kind == "gauntlet" and part.Color ~= JETT.Trim and part.Color ~= JETT.Skin then
+                        pcall(function() part.Color = c end)
+                    end
+                end
+            end
+        end)
+        UI.addButton(vmSec, "Rescan Viewmodel", function()
+            if vm.enabled then sweep() end
+        end)
+        UI.addButton(vmSec, "Restore Arms", function()
+            restoreAll()
+            vm.enabled = false
+            if vmToggle and vmToggle.setState then vmToggle.setState(false) end
+        end)
+
+        -- ---- DescendantAdded hook for weapon switches ----
+        Cam.DescendantAdded:Connect(function(d)
+            if not vm.enabled then return end
+            if not d:IsA("BasePart") then return end
+            local kind = classify(d.Name)
+            if kind and isArmPart(d) then
+                task.defer(function() if vm.enabled then paint(d, kind) end end)
+            end
+        end)
+        Cam.DescendantRemoving:Connect(function(d)
+            if vm.saved[d] then vm.saved[d] = nil end
+        end)
+
+        -- Camera can be replaced on respawn - rehook if that happens.
+        workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+            local nc = workspace.CurrentCamera
+            if nc and nc ~= Cam then
+                Cam = nc
+                if vm.enabled then sweep() end
+            end
+        end)
+
+        -- ---- gentle re-sweep (3x / sec) to catch mesh swaps mid-equip ----
+        local acc = 0
+        RunService.Heartbeat:Connect(function(dt)
+            if not vm.enabled then return end
+            acc = acc + dt
+            if acc >= 0.33 then acc = 0; sweep() end
+        end)
+    end)
+
     -- Remove the stats/info HUD created by the VM bytecode.
     -- We identify it by requiring BOTH an exact "health" label AND an exact
     -- "damage ratio" label as siblings under the same Frame — this combo is
