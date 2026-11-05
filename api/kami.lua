@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-05.r16"
+    local KAMI_BUILD = "2026-11-05.r17"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -492309,268 +492309,311 @@ end)
     end)
 
     -- ============================================================
-    -- [HIT EFFECTS + HIT SOUNDS] - explicit bind to UE's native Options
-    -- Scans getgenv().Toggles / getgenv().Options for every hit_effects_*
-    -- and hit_sounds_* key the VM registers at runtime, builds dedicated
-    -- sections wired through _activate so flipping anything reaches the
-    -- VM's own effect pipeline. If the VM registered nothing, nothing
-    -- shows up (we log what we found so you can see).
+    -- [HIT EFFECTS + HIT SOUNDS] - self-contained, 20 effects + 20
+    -- sounds with full render code. Hooks each enemy Humanoid's
+    -- Health property; on a drop > 0.5, spawns the selected effect
+    -- + plays the selected sound at the enemy's root. Preview
+    -- buttons fire against the local character so you can test
+    -- without a real hit.
     -- ============================================================
     task.spawn(function()
         local __ok, __err = pcall(function()
-        print("[kamidere] addon: hit-effects+sounds bind starting")
-        task.wait(4) -- let the VM finish building its Options table
+        print("[kamidere] addon: hit-effects+sounds (custom) starting")
+        task.wait(3)
 
         local miscTab = _tabObjects[4]
         if not miscTab then return end
 
-        local T = getgenv().Toggles or {}
-        local O = getgenv().Options or {}
+        local TweenSvc_HX  = game:GetService("TweenService")
+        local Debris_HX    = game:GetService("Debris")
+        local Players_HX   = game:GetService("Players")
+        local LP_HX        = Players_HX.LocalPlayer
 
-        local function scan(prefix)
-            local toggles, options = {}, {}
-            for k, obj in pairs(T) do
-                if type(k) == "string" and type(obj) == "table" and k:sub(1, #prefix) == prefix then
-                    toggles[#toggles + 1] = k
-                end
-            end
-            for k, obj in pairs(O) do
-                if type(k) == "string" and type(obj) == "table" and k:sub(1, #prefix) == prefix then
-                    options[#options + 1] = k
-                end
-            end
-            table.sort(toggles); table.sort(options)
-            return toggles, options
-        end
-
-        local effT, effO = scan("hit_effects")
-        local sndT, sndO = scan("hit_sounds")
-
-        print(("[kamidere] UE hit_effects_* found: %d toggles, %d options"):format(#effT, #effO))
-        print(("[kamidere] UE hit_sounds_*  found: %d toggles, %d options"):format(#sndT, #sndO))
-
-        -- Dump each key + its shape so we can see exactly what UE registered.
-        local function dumpKey(scope, k, obj)
-            local vtype = typeof(obj.Value)
-            local vrepr = tostring(obj.Value)
-            local values = ""
-            if type(obj.Values) == "table" then
-                local n = 0; local samples = {}
-                for kk, _ in pairs(obj.Values) do
-                    n = n + 1
-                    if n <= 8 then samples[#samples + 1] = tostring(kk) end
-                end
-                values = (" Values[%d]: {%s%s}"):format(n, table.concat(samples, ", "), n > 8 and ", ..." or "")
-            end
-            print(("[kamidere] %s %s  type=%s val=%s%s"):format(scope, k, vtype, vrepr, values))
-        end
-        for _, k in ipairs(effT) do dumpKey("T", k, T[k]) end
-        for _, k in ipairs(effO) do dumpKey("O", k, O[k]) end
-        for _, k in ipairs(sndT) do dumpKey("T", k, T[k]) end
-        for _, k in ipairs(sndO) do dumpKey("O", k, O[k]) end
-
-        if #effT + #effO + #sndT + #sndO == 0 then
-            warn("[kamidere] UE registered no hit_effects_* / hit_sounds_* options this session")
-            return
-        end
-
-        local function labelOf(k)
-            local s = k:gsub("^hit_effects_?", ""):gsub("^hit_sounds_?", ""):gsub("_", " ")
-            s = s:gsub("(%l)(%u)", function(a, b) return a .. " " .. b end)
-            s = s:gsub("(%a)([%w]*)", function(a, b) return a:upper() .. b:lower() end)
-            return s ~= "" and s or k
-        end
-
-        local function toColor3(v)
-            if typeof(v) == "Color3" then return v end
-            if type(v) == "table" and v.R and v.G and v.B then
-                return Color3.new(tonumber(v.R) or 0, tonumber(v.G) or 0, tonumber(v.B) or 0)
-            end
-            return Color3.fromRGB(255, 255, 255)
-        end
-
-        local function renderInto(container, toggleKeys, optionKeys)
-            for _, k in ipairs(toggleKeys) do
-                local obj = T[k]
-                UI.addToggle(container, labelOf(k), obj.Value == true, function(v)
-                    _activate(k, "Toggles", v)
-                end)
-            end
-            -- group color_N inline
-            local colGroups, skip = {}, {}
-            for _, k in ipairs(optionKeys) do
-                local base, idx = k:lower():match("^(.-)col_?(%d+)$")
-                if base and idx then
-                    colGroups[base] = colGroups[base] or {}
-                    table.insert(colGroups[base], { key = k, idx = tonumber(idx) })
-                end
-            end
-            for base, members in pairs(colGroups) do
-                if #members >= 2 then
-                    table.sort(members, function(a, b) return a.idx < b.idx end)
-                    for i = 2, #members do skip[members[i].key] = true end
-                else
-                    colGroups[base] = nil
-                end
-            end
-            local emittedGroup = {}
-            for _, k in ipairs(optionKeys) do
-                if skip[k] then
-                    -- skip, already rendered as part of a group
-                elseif true then
-                    local obj = O[k]
-                    local base, idx = k:lower():match("^(.-)col_?(%d+)$")
-                    if base and idx and colGroups[base] and not emittedGroup[base] then
-                        emittedGroup[base] = true
-                        local entries = {}
-                        for _, m in ipairs(colGroups[base]) do
-                            local mo = O[m.key]
-                            if mo then
-                                local mk = m.key
-                                table.insert(entries, {
-                                    initial  = toColor3(mo.Value),
-                                    callback = function(c) _activate(mk, "Options", c) end,
-                                })
-                            end
-                        end
-                        UI.addColorGroup(container, "Colors", entries)
-                    elseif type(obj.Values) == "table" then
-                        -- Build list from Values table. Handles both array-shape
-                        -- (single-select: Values = {"A","B","C"}) and dict-shape
-                        -- (multi-select: Values = {A=false, B=true, ...}).
-                        local sv = {}
-                        local seen = {}
-                        for _, x in ipairs(obj.Values) do
-                            if type(x) == "string" and not seen[x] then
-                                sv[#sv + 1] = x; seen[x] = true
-                            end
-                        end
-                        for kk, _ in pairs(obj.Values) do
-                            if type(kk) == "string" and not seen[kk] then
-                                sv[#sv + 1] = kk; seen[kk] = true
-                            end
-                        end
-                        table.sort(sv)
-                        if #sv > 0 then
-                            local default = type(obj.Value) == "string" and obj.Value or sv[1]
-                            UI.addDropdown(container, labelOf(k), sv, default,
-                                function(v) _activate(k, "Options", v) end)
-                        end
-                    elseif typeof(obj.Value) == "Color3"
-                        or (type(obj.Value) == "table" and obj.Value.R and obj.Value.G and obj.Value.B)
-                    then
-                        UI.addColorPicker(container, labelOf(k), toColor3(obj.Value), function(c)
-                            _activate(k, "Options", c)
-                        end)
-                    elseif tonumber(obj.Min) or tonumber(obj.Max) or tonumber(obj.Value) then
-                        local mn = tonumber(obj.Min) or 0
-                        local mx = tonumber(obj.Max) or 100
-                        local cur = tonumber(obj.Value) or mn
-                        local fl = (mx - math.floor(mx)) > 0 or (mn - math.floor(mn)) > 0
-                        UI.addSlider(container, labelOf(k), mn, mx, cur, fl, function(v)
-                            _activate(k, "Options", v)
-                        end)
-                    end
-                end
-            end
-        end
-
-        -- --------------- PREVIEW HELPERS ---------------
-        local Debris_HX = game:GetService("Debris")
-
-        -- Known hit-sound name -> rbxassetid map. UE's dropdown Value is a
-        -- short lowercase name (minecraft/pop/rust/tf2/bonk/oof/...). We
-        -- try to resolve the name to an id so Preview plays locally even
-        -- when we have no direct read on the VM's internal sound table.
-        local KNOWN_HIT_SOUND_IDS = {
-            minecraft        = "rbxassetid://7384271040",
-            pop              = "rbxassetid://6895079853",
-            rust             = "rbxassetid://6541725837",
-            tf2              = "rbxassetid://611403141",
-            bonk             = "rbxassetid://6826617738",
-            oof              = "rbxassetid://5543191254",
-            anime            = "rbxassetid://5751043737",
-            ["anime punch"]  = "rbxassetid://5751043737",
-            skeet            = "rbxassetid://7093750382",
-            nebula           = "rbxassetid://7249033956",
-            ["vine boom"]    = "rbxassetid://5153947961",
-            ["metal pipe"]   = "rbxassetid://5478359253",
-            ding             = "rbxassetid://7302080645",
-            glass            = "rbxassetid://5174219111",
-            ["deep bass"]    = "rbxassetid://180083194",
-            hit              = "rbxassetid://5748925860",
-            tick             = "rbxassetid://12222124",
-            damage           = "rbxassetid://5748925860",
-            freeze           = "rbxassetid://5748926180",
+        -- ------------- CATALOGS (edit freely) -------------
+        local EFFECT_ORDER = {
+            "Ball", "Diamond", "Explosion", "Fire", "Smoke",
+            "Confetti", "Sparkles", "Shockwave", "Lightning", "Pop",
+            "Ring", "Star", "Heart", "Energy", "Blood",
+            "Crit Text", "Bubble", "Meteor", "Rose", "Void",
+        }
+        local SOUND_ORDER = {
+            "Bonk", "Oof", "Minecraft", "Rust", "Pop",
+            "Anime Punch", "Skeet", "Nebula", "Vine Boom", "Metal Pipe",
+            "Discord Ping", "Bruh", "Fortnite Death", "Osu Hit", "Kirby",
+            "Hyperhit", "Tf2 Hit", "Deep Bass", "Glass", "Ding",
+        }
+        local SOUND_IDS = {
+            ["Bonk"]           = "rbxassetid://6826617738",
+            ["Oof"]            = "rbxassetid://5543191254",
+            ["Minecraft"]      = "rbxassetid://7384271040",
+            ["Rust"]           = "rbxassetid://6541725837",
+            ["Pop"]            = "rbxassetid://6895079853",
+            ["Anime Punch"]    = "rbxassetid://5751043737",
+            ["Skeet"]          = "rbxassetid://7093750382",
+            ["Nebula"]         = "rbxassetid://7249033956",
+            ["Vine Boom"]      = "rbxassetid://5153947961",
+            ["Metal Pipe"]     = "rbxassetid://5478359253",
+            ["Discord Ping"]   = "rbxassetid://5162226106",
+            ["Bruh"]           = "rbxassetid://4624277062",
+            ["Fortnite Death"] = "rbxassetid://5478360068",
+            ["Osu Hit"]        = "rbxassetid://5215929020",
+            ["Kirby"]          = "rbxassetid://6563101997",
+            ["Hyperhit"]       = "rbxassetid://9068897577",
+            ["Tf2 Hit"]        = "rbxassetid://611403141",
+            ["Deep Bass"]      = "rbxassetid://180083194",
+            ["Glass"]          = "rbxassetid://5174219111",
+            ["Ding"]           = "rbxassetid://7302080645",
         }
 
-        local function previewSound()
-            local sel = O.hit_sounds_selected and O.hit_sounds_selected.Value
-            local vol = O.hit_sounds_volume   and tonumber(O.hit_sounds_volume.Value)   or 1
-            local id  = type(sel) == "string" and KNOWN_HIT_SOUND_IDS[sel:lower()] or nil
-            if not id then
-                warn(("[kamidere] no known asset id for hit sound '%s' - add it to KNOWN_HIT_SOUND_IDS"):format(tostring(sel)))
-                return
-            end
-            local char = client.Character
-            local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-            local cf   = hrp and hrp.CFrame or CFrame.new(0, 10, 0)
+        -- ------------- STATE -------------
+        local hx = {
+            fx_enabled      = false,
+            fx_name         = "Ball",
+            fx_color        = Color3.fromRGB(215, 180, 65),
+            fx_size         = 2.0,
+            fx_lifetime     = 1.0,
+            fx_team_check   = true,
+            snd_enabled     = false,
+            snd_name        = "Bonk",
+            snd_volume      = 1.0,
+            snd_team_check  = true,
+        }
+
+        -- ------------- HELPERS -------------
+        local function mkPart(cf, color, size, trans)
             local p = Instance.new("Part")
             p.Anchored = true; p.CanCollide = false; p.CanQuery = false; p.CanTouch = false
-            p.Transparency = 1; p.Size = Vector3.new(0.1, 0.1, 0.1); p.CFrame = cf
+            p.CastShadow = false
+            p.Material = Enum.Material.Neon
+            p.Color = color
+            p.Transparency = trans or 0
+            p.Size = typeof(size) == "Vector3" and size or Vector3.new(size, size, size)
+            p.CFrame = cf
             p.Parent = workspace
+            return p
+        end
+        local function tw(obj, time, goal, style, dir)
+            TweenSvc_HX:Create(obj, TweenInfo.new(time, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out), goal):Play()
+        end
+
+        -- ------------- EFFECT BUILDERS -------------
+        local EFFECTS = {}
+        EFFECTS["Ball"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, size); p.Shape = Enum.PartType.Ball
+            tw(p, life, { Size = Vector3.new(size * 2.4, size * 2.4, size * 2.4), Transparency = 1 })
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+        EFFECTS["Diamond"] = function(cf, color, size, life)
+            local p = mkPart(cf * CFrame.Angles(0, math.pi / 4, 0), color, Vector3.new(size, size * 1.6, size))
+            tw(p, life, { Size = Vector3.new(size * 2, size * 3, size * 2), Transparency = 1, CFrame = p.CFrame * CFrame.Angles(0, math.pi, 0) })
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+        EFFECTS["Explosion"] = function(cf, color, size, life)
+            local e = Instance.new("Explosion")
+            e.Position = cf.Position; e.BlastRadius = size * 2; e.BlastPressure = 0
+            e.DestroyJointRadiusPercent = 0; e.ExplosionType = Enum.ExplosionType.NoCraters; e.Visible = true
+            e.Parent = workspace; Debris_HX:AddItem(e, life + 0.2)
+        end
+        EFFECTS["Fire"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, 0.1, 1)
+            local fire = Instance.new("Fire"); fire.Heat = size; fire.Size = size * 2
+            fire.Color = color; fire.SecondaryColor = color; fire.Parent = p
+            task.delay(life, function() if fire.Parent then fire.Enabled = false end end)
+            Debris_HX:AddItem(p, life + 2)
+        end
+        EFFECTS["Smoke"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, 0.1, 1)
+            local s = Instance.new("Smoke"); s.Color = color; s.Size = size; s.Opacity = 0.6
+            s.RiseVelocity = size * 2; s.Parent = p
+            task.delay(life, function() if s.Parent then s.Enabled = false end end)
+            Debris_HX:AddItem(p, life + 2)
+        end
+        EFFECTS["Confetti"] = function(cf, color, size, life)
+            for _ = 1, 15 do
+                local c = Color3.fromHSV(math.random(), 0.85, 1)
+                local p = mkPart(cf, c, size * 0.2); p.Anchored = false
+                p.AssemblyLinearVelocity = Vector3.new(math.random(-15, 15), math.random(10, 25), math.random(-15, 15))
+                Debris_HX:AddItem(p, life + 0.3)
+            end
+        end
+        EFFECTS["Sparkles"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, 0.1, 1)
+            local sp = Instance.new("Sparkles"); sp.SparkleColor = color; sp.Parent = p
+            task.delay(life, function() if sp.Parent then sp.Enabled = false end end)
+            Debris_HX:AddItem(p, life + 2)
+        end
+        EFFECTS["Shockwave"] = function(cf, color, size, life)
+            local p = mkPart(cf * CFrame.Angles(0, 0, math.pi / 2), color, Vector3.new(size * 0.2, size * 0.4, size * 0.4))
+            p.Shape = Enum.PartType.Cylinder
+            tw(p, life, { Size = Vector3.new(size * 0.2, size * 6, size * 6), Transparency = 1 })
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+        EFFECTS["Lightning"] = function(cf, color, size, life)
+            local last = cf.Position + Vector3.new(0, size * 4, 0)
+            for i = 1, 6 do
+                local nxt = cf.Position + Vector3.new(math.random(-20, 20) / 10, size * (4 - i * 0.7), math.random(-20, 20) / 10)
+                local mid = (last + nxt) * 0.5
+                local p = mkPart(CFrame.lookAt(mid, nxt), color, Vector3.new(size * 0.1, size * 0.1, (nxt - last).Magnitude))
+                tw(p, life, { Transparency = 1 })
+                Debris_HX:AddItem(p, life + 0.2); last = nxt
+            end
+        end
+        EFFECTS["Pop"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, size * 0.5); p.Shape = Enum.PartType.Ball
+            tw(p, life * 0.6, { Size = Vector3.new(size * 1.6, size * 1.6, size * 1.6), Transparency = 1 }, Enum.EasingStyle.Back)
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+        EFFECTS["Ring"] = function(cf, color, size, life)
+            local p = mkPart(cf * CFrame.Angles(0, 0, math.pi / 2), color, Vector3.new(size * 0.1, size, size))
+            p.Shape = Enum.PartType.Cylinder
+            tw(p, life, { Size = Vector3.new(size * 0.1, size * 4, size * 4), Transparency = 1 }, Enum.EasingStyle.Sine)
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+        EFFECTS["Star"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, size)
+            for _, face in ipairs({ Enum.NormalId.Front, Enum.NormalId.Back }) do
+                local d = Instance.new("Decal"); d.Texture = "rbxassetid://6023565776"; d.Face = face; d.Color3 = color; d.Parent = p
+            end
+            tw(p, life, { Size = Vector3.new(size * 2.5, size * 2.5, size * 2.5), Transparency = 1 })
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+        EFFECTS["Heart"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, size)
+            for _, face in ipairs({ Enum.NormalId.Front, Enum.NormalId.Back }) do
+                local d = Instance.new("Decal"); d.Texture = "rbxassetid://6023565961"; d.Face = face; d.Color3 = color; d.Parent = p
+            end
+            tw(p, life, { CFrame = cf + Vector3.new(0, size * 2, 0), Size = Vector3.new(size * 2.5, size * 2.5, size * 2.5), Transparency = 1 })
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+        EFFECTS["Energy"] = function(cf, color, size, life)
+            for i = 1, 3 do
+                local p = mkPart(cf, color, size * (0.5 + i * 0.3), 0.3)
+                p.Shape = Enum.PartType.Ball; p.Material = Enum.Material.ForceField
+                tw(p, life * (1 + i * 0.2), { Size = Vector3.new(size * 3, size * 3, size * 3), Transparency = 1 })
+                Debris_HX:AddItem(p, life * 2 + 0.2)
+            end
+        end
+        EFFECTS["Blood"] = function(cf, color, size, life)
+            for _ = 1, 8 do
+                local p = mkPart(cf, Color3.fromRGB(140, 10, 10), size * 0.2)
+                p.Shape = Enum.PartType.Ball; p.Anchored = false
+                p.AssemblyLinearVelocity = Vector3.new(math.random(-20, 20), math.random(5, 20), math.random(-20, 20))
+                Debris_HX:AddItem(p, life + 0.3)
+            end
+        end
+        EFFECTS["Crit Text"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, 0.1, 1)
+            local gui = Instance.new("BillboardGui"); gui.Size = UDim2.new(0, 140, 0, 46); gui.AlwaysOnTop = true
+            gui.LightInfluence = 0; gui.Parent = p
+            local label = Instance.new("TextLabel")
+            label.Size = UDim2.new(1, 0, 1, 0); label.BackgroundTransparency = 1; label.Text = "CRIT!"
+            label.TextColor3 = color; label.TextStrokeTransparency = 0; label.TextStrokeColor3 = Color3.new()
+            label.TextScaled = true; label.Font = Enum.Font.GothamBlack; label.Parent = gui
+            tw(p,     life, { CFrame = cf + Vector3.new(0, size * 3, 0) })
+            tw(label, life, { TextTransparency = 1, TextStrokeTransparency = 1 })
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+        EFFECTS["Bubble"] = function(cf, color, size, life)
+            for _ = 1, 6 do
+                local p = mkPart(cf, color, size * (0.2 + math.random() * 0.3), 0.5)
+                p.Shape = Enum.PartType.Ball; p.Material = Enum.Material.Glass
+                tw(p, life, { CFrame = cf + Vector3.new(math.random(-20, 20) / 10, size * 2, math.random(-20, 20) / 10), Transparency = 1 })
+                Debris_HX:AddItem(p, life + 0.2)
+            end
+        end
+        EFFECTS["Meteor"] = function(cf, color, size, life)
+            local start = cf + Vector3.new(0, size * 8, 0)
+            local p = mkPart(start, color, size); p.Shape = Enum.PartType.Ball
+            local fire = Instance.new("Fire"); fire.Heat = size; fire.Size = size * 2; fire.Color = color; fire.Parent = p
+            tw(p, life, { CFrame = cf, Transparency = 0.5 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+            Debris_HX:AddItem(p, life + 0.3)
+        end
+        EFFECTS["Rose"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, size)
+            for _, face in ipairs({ Enum.NormalId.Front, Enum.NormalId.Back }) do
+                local d = Instance.new("Decal"); d.Texture = "rbxassetid://6023565778"; d.Face = face; d.Color3 = color; d.Parent = p
+            end
+            tw(p, life, { CFrame = cf * CFrame.Angles(0, math.pi * 2, 0), Size = Vector3.new(size * 2, size * 2, size * 2), Transparency = 1 })
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+        EFFECTS["Void"] = function(cf, color, size, life)
+            local p = mkPart(cf, Color3.fromRGB(10, 0, 15), size * 2, 0.2)
+            p.Shape = Enum.PartType.Ball; p.Material = Enum.Material.Neon
+            tw(p, life, { Size = Vector3.new(0.1, 0.1, 0.1), Transparency = 1 })
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        -- ------------- PLAYBACK -------------
+        local function playEffect(cf)
+            local fn = EFFECTS[hx.fx_name]; if not fn then return end
+            pcall(fn, cf, hx.fx_color, hx.fx_size, hx.fx_lifetime)
+        end
+        local function playSound(cf)
+            local id = SOUND_IDS[hx.snd_name]; if not id then return end
+            local p = mkPart(cf, Color3.new(1, 1, 1), 0.1, 1); p.CanCollide = false
             local s = Instance.new("Sound")
-            s.SoundId = id; s.Volume = vol; s.RollOffMaxDistance = 180
-            s.Parent = p
-            s:Play()
+            s.SoundId = id; s.Volume = hx.snd_volume
+            s.RollOffMode = Enum.RollOffMode.Linear; s.RollOffMaxDistance = 180
+            s.Parent = p; s:Play()
             s.Ended:Connect(function() if p.Parent then p:Destroy() end end)
             Debris_HX:AddItem(p, 6)
         end
 
-        -- Preview Effect: pokes the VM's own hit pipeline by briefly
-        -- dropping the local character's health by a sliver, which many
-        -- cheat hit-effect bindings trigger off of. Falls back to a
-        -- generic visual pulse if the health hook doesn't fire anything.
-        local function previewEffect()
-            local char = client.Character
-            local hum  = char and char:FindFirstChildOfClass("Humanoid")
-            local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-            if hum and hum.Health > 2 then
-                local old = hum.Health
-                hum.Health = old - 1
-                task.delay(0.1, function()
-                    if hum and hum.Parent and hum.Health < old then hum.Health = old end
-                end)
-            end
-            if hrp then
-                local p = Instance.new("Part")
-                p.Anchored = true; p.CanCollide = false; p.CanQuery = false; p.CanTouch = false
-                p.Material = Enum.Material.Neon
-                p.Color = Color3.fromRGB(255, 220, 90)
-                p.Size = Vector3.new(0.5, 0.5, 0.5); p.Shape = Enum.PartType.Ball
-                p.CFrame = hrp.CFrame
-                p.Parent = workspace
-                TweenService:Create(p, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                    Size = Vector3.new(4, 4, 4), Transparency = 1,
-                }):Play()
-                Debris_HX:AddItem(p, 1)
-            end
-        end
+        -- ------------- UI -------------
+        local fxSec = UI.createSection(miscTab, "Hit Effects", "left")
+        UI.addToggle(fxSec, "Effects Enabled", false, function(v) hx.fx_enabled = v end)
+        UI.addDropdown(fxSec, "Effect", EFFECT_ORDER, "Ball", function(v) hx.fx_name = v end)
+        UI.addSlider(fxSec, "Size",     0.2, 10, 2, true, function(v) hx.fx_size = v end)
+        UI.addSlider(fxSec, "Lifetime", 0.1,  5, 1, true, function(v) hx.fx_lifetime = v end)
+        UI.addToggle(fxSec, "Only Enemies (FX)", true, function(v) hx.fx_team_check = v end)
+        UI.addColorPicker(fxSec, "Effect Color", hx.fx_color, function(c) hx.fx_color = c end)
+        UI.addButton(fxSec, "Preview Effect", function()
+            local ch = LP_HX.Character
+            local root = ch and ch:FindFirstChild("HumanoidRootPart")
+            if root then playEffect(root.CFrame + root.CFrame.LookVector * 5) end
+        end)
 
-        if #effT + #effO > 0 then
-            local effSec = UI.createSection(miscTab, "Hit Effects", "left")
-            renderInto(effSec, effT, effO)
-            UI.addButton(effSec, "Preview Effect", previewEffect)
-        end
-        if #sndT + #sndO > 0 then
-            local sndSec = UI.createSection(miscTab, "Hit Sounds", "right")
-            renderInto(sndSec, sndT, sndO)
-            UI.addButton(sndSec, "Preview Sound", previewSound)
-        end
+        local sndSec = UI.createSection(miscTab, "Hit Sounds", "right")
+        UI.addToggle(sndSec, "Sounds Enabled", false, function(v) hx.snd_enabled = v end)
+        UI.addDropdown(sndSec, "Sound", SOUND_ORDER, "Bonk", function(v) hx.snd_name = v end)
+        UI.addSlider(sndSec, "Volume", 0, 5, 1, true, function(v) hx.snd_volume = v end)
+        UI.addToggle(sndSec, "Only Enemies (Sound)", true, function(v) hx.snd_team_check = v end)
+        UI.addButton(sndSec, "Preview Sound", function()
+            local ch = LP_HX.Character
+            local root = ch and ch:FindFirstChild("HumanoidRootPart")
+            if root then playSound(root.CFrame) end
+        end)
 
-        print("[kamidere] addon: hit-effects+sounds sections built")
+        -- ------------- HIT DETECTION -------------
+        local function isEnemy(plr)
+            if plr == LP_HX then return false end
+            if plr.Team and LP_HX.Team and plr.Team == LP_HX.Team then return false end
+            return true
+        end
+        local function bindChar(plr, char)
+            local hum = char:WaitForChild("Humanoid", 5); if not hum then return end
+            local root = char:WaitForChild("HumanoidRootPart", 5); if not root then return end
+            local last = hum.Health
+            hum:GetPropertyChangedSignal("Health"):Connect(function()
+                local new = hum.Health
+                if new < last - 0.05 and new > 0 then
+                    local enemy = isEnemy(plr)
+                    if hx.fx_enabled and (not hx.fx_team_check or enemy) then pcall(playEffect, root.CFrame) end
+                    if hx.snd_enabled and (not hx.snd_team_check or enemy) then pcall(playSound, root.CFrame) end
+                end
+                last = new
+            end)
+        end
+        local function bindPlr(plr)
+            if plr.Character then task.spawn(bindChar, plr, plr.Character) end
+            plr.CharacterAdded:Connect(function(c) task.spawn(bindChar, plr, c) end)
+        end
+        for _, p in ipairs(Players_HX:GetPlayers()) do bindPlr(p) end
+        Players_HX.PlayerAdded:Connect(bindPlr)
+
+        print("[kamidere] addon: hit-effects+sounds (custom) section built")
         end) -- pcall
-        if not __ok then warn("[kamidere] HIT bind ERROR: " .. tostring(__err)) end
+        if not __ok then warn("[kamidere] HIT CUSTOM ERROR: " .. tostring(__err)) end
     end)
 
     -- ============================================================
