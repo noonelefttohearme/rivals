@@ -489409,10 +489409,44 @@ local __kami_result = runApplication()
 -- [KAMIDERE UI INJECTION]
 -- ============================================================
 ;task.defer(function()
-    local _lin = getgenv().Library
-    if _lin and typeof(_lin.ScreenGui) == "Instance" then
-        _lin.ScreenGui.Enabled = false
+    -- Build tag: bump this when shipping so the console tells us which build loaded.
+    local KAMI_BUILD = "2026-11-05.r3"
+    print("[kamidere] build " .. KAMI_BUILD .. " loaded")
+    -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
+    -- the ScreenGui's Enabled can be set back to true by the VM internally, and
+    -- popup ScreenGuis for ColorPickers/Dropdowns can live in CoreGui, so we
+    -- keep re-disabling for a few seconds and also kill known Linoria names.
+    local function _killLinoria()
+        local lib = getgenv().Library
+        if lib and typeof(lib.ScreenGui) == "Instance" then
+            pcall(function() lib.ScreenGui.Enabled = false end)
+        end
+        local okCG, cg = pcall(function() return game:GetService("CoreGui") end)
+        local playerGuiRef
+        pcall(function() playerGuiRef = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui") end)
+        local roots = {cg and okCG and cg or nil, playerGuiRef}
+        for _, root in ipairs(roots) do
+            for _, child in ipairs(root:GetChildren()) do
+                if child:IsA("ScreenGui") then
+                    local nm = child.Name
+                    if nm ~= "KamidereUI" and nm ~= "KamiderePopup" then
+                        if nm == "Linoria" or nm:find("[Ll]inoria") or nm:find("[Mm]odal") or nm == "LinoriaLib" or nm == "ScreenGui" then
+                            -- only disable, don't destroy — VM may re-bind it
+                            pcall(function() child.Enabled = false end)
+                        end
+                    end
+                end
+            end
+        end
     end
+    -- initial + repeated kills for 10 seconds (VM may finish building after us)
+    _killLinoria()
+    task.spawn(function()
+        for _ = 1, 20 do
+            task.wait(0.5)
+            pcall(_killLinoria)
+        end
+    end)
 
 -- ==============================================================================
 -- [KAMIDERE] FULL SCRIPT (UI + FUNCTIONALITY INTEGRATED)
@@ -491737,11 +491771,28 @@ end)
             end
 
             -- Prefixes whose entire category should be hidden from the UI.
-            local _HIDE_PREFIX = {damage=true, damagenumber=true, damagenumbers=true, dmg=true}
+            -- Match by substring on prefix too (not just exact) in case the VM
+            -- registers keys under unexpected naming like dmgnums_ or dmgnum_.
+            local _HIDE_EXACT = {damage=true, damagenumber=true, damagenumbers=true, dmg=true, dmgnumber=true, dmgnumbers=true, dmgnum=true, dmgnums=true, dn=true}
+            local function _HIDE_PREFIX_FN(p)
+                if _HIDE_EXACT[p] then return true end
+                local lp = p:lower()
+                if lp:find("damage") or lp:find("dmgnum") or lp:find("damnum") then return true end
+                return false
+            end
+
+            -- Table-shaped so the render loop can also cheaply skip (below).
+            local _HIDE_PREFIX = setmetatable({}, { __index = function(_, k) return _HIDE_PREFIX_FN(k) end })
 
             local _claimed = {}
             for _,g in ipairs(_tabGroups) do for _,p in ipairs(g.prefixes) do _claimed[p]=true end end
-            for prefix in pairs(_buckets) do if not _claimed[prefix] and not _HIDE_PREFIX[prefix] then table.insert(_tabGroups[4].prefixes, prefix) end end
+            for prefix in pairs(_buckets) do
+                if _HIDE_PREFIX_FN(prefix) then
+                    warn("[kamidere] hiding category: " .. prefix .. " (display=" .. tostring(_prefixDisp[prefix]) .. ")")
+                elseif not _claimed[prefix] then
+                    table.insert(_tabGroups[4].prefixes, prefix)
+                end
+            end
 
             local function _addSec(container, bucket)
                 local b=_buckets[bucket]; if not b then return end
@@ -491770,12 +491821,25 @@ end)
                 end
                 for _,k in ipairs(b.o) do
                     local obj=_O[k]; if not obj then continue end
-                    if type(obj.Values)=="table" and #obj.Values>0 then
+                    local isColor = (typeof(obj.Value)=="Color3")
+                        or (obj.Type=="ColorPicker")
+                        or (type(obj.Value)=="table" and obj.Value.R and obj.Value.G and obj.Value.B)
+                        or (k:lower():find("_col") ~= nil)
+                        or (k:lower():find("color") ~= nil and type(obj.Value)~="string" and type(obj.Values)~="table")
+                    if isColor then
+                        local initial = obj.Value
+                        if typeof(initial) ~= "Color3" then
+                            if type(initial)=="table" and initial.R and initial.G and initial.B then
+                                initial = Color3.new(tonumber(initial.R) or 0, tonumber(initial.G) or 0, tonumber(initial.B) or 0)
+                            else
+                                initial = Color3.fromRGB(255, 255, 255)
+                            end
+                        end
+                        local _cr=UI.addColorPicker(container,lbl(k),initial,function(c) _activate(k,"Options",c) end)
+                        if _cr and _cr.setColor then _uiRefs[k]=function(v) if typeof(v)=="Color3" then _cr.setColor(v) end end end
+                    elseif type(obj.Values)=="table" and #obj.Values>0 then
                         local sv={}; for _,x in ipairs(obj.Values) do if type(x)=="string" then sv[#sv+1]=x end end
                         if #sv>0 then local _dr=UI.addDropdown(container,lbl(k),sv,type(obj.Value)=="string" and obj.Value or sv[1],function(v) _activate(k,"Options",v) end); if _dr then _uiRefs[k]=function(v) _dr.setValue(v) end end end
-                    elseif typeof(obj.Value)=="Color3" then
-                        local _cr=UI.addColorPicker(container,lbl(k),obj.Value,function(c) _activate(k,"Options",c) end)
-                        if _cr and _cr.setColor then _uiRefs[k]=function(v) if typeof(v)=="Color3" then _cr.setColor(v) end end end
                     elseif tonumber(obj.Min) or tonumber(obj.Max) or tonumber(obj.Value) then
                         local mn=tonumber(obj.Min) or 0; local mx=tonumber(obj.Max) or 100; local cur=tonumber(obj.Value) or mn
                         local fl=(mx-math.floor(mx))>0 or (mn-math.floor(mn))>0
