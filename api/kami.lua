@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-05.r14"
+    local KAMI_BUILD = "2026-11-05.r15"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -491763,6 +491763,7 @@ end)
             mainFrame.Visible = true
             tween(_menuBlur, {Size = 22}, 0.22)
             pcall(function() UserInputService.MouseBehavior = Enum.MouseBehavior.Default end)
+            pcall(function() UserInputService.MouseIconEnabled = true end)
         else
             tween(_menuBlur, {Size = 0}, 0.18)
             task.delay(0.18, function()
@@ -491770,6 +491771,20 @@ end)
             end)
         end
     end
+
+    -- Rivals locks the mouse to center every frame for aiming. When the
+    -- kami menu is open we fight that each frame so the cursor is free
+    -- and visible and the click-through still lands on our controls.
+    RunService.RenderStepped:Connect(function()
+        if _menuOpen then
+            if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
+                pcall(function() UserInputService.MouseBehavior = Enum.MouseBehavior.Default end)
+            end
+            if UserInputService.MouseIconEnabled ~= true then
+                pcall(function() UserInputService.MouseIconEnabled = true end)
+            end
+        end
+    end)
 
     UI.switchTab(1)
     _showMenu(true)
@@ -492644,36 +492659,57 @@ end)
                 vm.resolved.tex  = tid or ""
                 return true
             end
-            -- otherwise load the asset id and walk for a MeshPart
+            -- otherwise load the asset id and walk for a MeshPart.
+            -- Try game:GetObjects first (works for public assets in most
+            -- executors), then InsertService:LoadAsset fallback.
             local id = (vm.asset_id or ""):gsub("%D", "")
             if id == "" then return false end
             local url = "rbxassetid://" .. id
-            local ok, inst = pcall(function()
+            local inst
+            local ok, err = pcall(function()
                 if game.GetObjects then
                     local objs = game:GetObjects(url)
-                    return objs and objs[1] or nil
+                    if objs and objs[1] then inst = objs[1]; return end
                 end
-                return nil
+                local okIS, is = pcall(function() return game:GetService("InsertService") end)
+                if okIS and is and is.LoadAsset then
+                    local okLoad, model = pcall(function() return is:LoadAsset(tonumber(id)) end)
+                    if okLoad and model then inst = model; return end
+                end
             end)
-            if not ok or not inst then
-                warn("[kami/viewmodel] failed to load asset " .. url)
+            if not inst then
+                warn("[kami/viewmodel] failed to load asset " .. url .. " (" .. tostring(err) .. ")")
                 return false
             end
+            print("[kami/viewmodel] loaded asset " .. url .. " -> " .. inst.ClassName .. " '" .. inst.Name .. "'")
             local picked
-            if inst:IsA("MeshPart") then
+            if inst:IsA("MeshPart") and inst.MeshId ~= "" then
                 picked = inst
             else
                 for _, d in ipairs(inst:GetDescendants()) do
                     if d:IsA("MeshPart") and d.MeshId ~= "" then picked = d; break end
                 end
+                if not picked then
+                    -- SpecialMesh (legacy) fallback
+                    for _, d in ipairs(inst:GetDescendants()) do
+                        if d:IsA("SpecialMesh") and d.MeshId ~= "" then
+                            vm.resolved.mesh = d.MeshId
+                            vm.resolved.tex  = d.TextureId or ""
+                            print("[kami/viewmodel] using SpecialMesh: " .. d.MeshId)
+                            pcall(function() inst:Destroy() end)
+                            return true
+                        end
+                    end
+                end
             end
             if not picked then
                 pcall(function() inst:Destroy() end)
-                warn("[kami/viewmodel] no MeshPart found in asset " .. url)
+                warn("[kami/viewmodel] no MeshPart/SpecialMesh found in asset " .. url)
                 return false
             end
             vm.resolved.mesh = picked.MeshId
             vm.resolved.tex  = picked.TextureID
+            print("[kami/viewmodel] resolved mesh=" .. vm.resolved.mesh .. " tex=" .. (vm.resolved.tex or ""))
             pcall(function() inst:Destroy() end)
             return true
         end
@@ -492724,9 +492760,31 @@ end)
 
         local function sweep()
             if not vm.enabled then return end
+            local classified = 0
+            local meshparts = {}
             for _, d in ipairs(Cam:GetDescendants()) do
+                if d:IsA("MeshPart") and d.MeshId ~= "" then
+                    meshparts[#meshparts + 1] = d
+                end
                 local kind = classify(d.Name)
-                if kind and isArmPart(d) then swap(d, kind) end
+                if kind and isArmPart(d) then
+                    swap(d, kind)
+                    classified = classified + 1
+                end
+            end
+            -- Fallback: if classify() matched nothing but the camera has
+            -- MeshParts, those are almost certainly the viewmodel mesh set
+            -- (rivals parents viewmodel under CurrentCamera). Treat all of
+            -- them as gauntlet so Custom Arms visibly does something.
+            if classified == 0 and #meshparts > 0 then
+                print(("[kami/viewmodel] classify matched 0; fallback swap on %d MeshPart(s) under camera"):format(#meshparts))
+                for _, d in ipairs(meshparts) do
+                    if not vm.saved[d] then swap(d, "gauntlet") end
+                end
+            elseif classified == 0 and #meshparts == 0 then
+                -- No viewmodel in sight - probably no gun equipped yet.
+                -- Don't spam; just stay silent and let the DescendantAdded
+                -- hook or next sweep catch the parts when they appear.
             end
         end
 
@@ -492767,6 +492825,12 @@ end)
             local kind = classify(d.Name)
             if kind and isArmPart(d) then
                 task.defer(function() if vm.enabled then swap(d, kind) end end)
+            elseif d:IsA("MeshPart") and d.MeshId ~= "" then
+                -- Fallback catches new viewmodel meshes on weapon switch
+                -- even when their part names don't match classify().
+                task.defer(function()
+                    if vm.enabled and not vm.saved[d] then swap(d, "gauntlet") end
+                end)
             end
         end)
         Cam.DescendantRemoving:Connect(function(d)
