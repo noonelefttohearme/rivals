@@ -492339,6 +492339,129 @@ end)
         end)
     end)
 
+    -- ============================================================
+    -- [WEAPONS] - No Recoil / No Spread / No Bullet Drop
+    -- Patches ReplicatedStorage.Modules.ItemLibrary.Items rows
+    -- where Type=='Gun'. Recoil + Spread mirror the script exactly
+    -- (same field list). Bullet Drop is a defensive sweep of any
+    -- gravity-named numeric/vector field - no-op if the game does
+    -- not expose one.
+    -- ============================================================
+    task.spawn(function()
+        task.wait(3)
+
+        local RS_WX = game:GetService("ReplicatedStorage")
+
+        local wx = {
+            no_recoil = false,
+            no_spread = false,
+            no_drop   = false,
+        }
+
+        -- ---- resolve ItemLibrary ----
+        local lib
+        for _ = 1, 10 do
+            local ok, result = pcall(function()
+                local mods = RS_WX:FindFirstChild("Modules")
+                if not mods then return nil end
+                local il = mods:FindFirstChild("ItemLibrary")
+                if not il then return nil end
+                return require(il)
+            end)
+            if ok and type(result) == "table" then lib = result; break end
+            task.wait(1)
+        end
+        if not lib or type(lib.Items) ~= "table" then
+            warn("[kami/weapons] ItemLibrary.Items not found; weapons addon idle")
+            return
+        end
+
+        -- ---- field schemas ----
+        local RECOIL_FIELDS = {"ShootRecoil", "ShootCameraDisplacementRecoil"}
+        local SPREAD_FIELDS = {"ShootSpread", "ShootSpreadPerVelocityUnit", "ShootSpreadPerVelocityLimit"}
+        local DROP_FIELDS   = {
+            "ShootGravity", "BulletGravity", "ProjectileGravity",
+            "ShootGravityScale", "GravityScale", "Gravity",
+            "ShootDrop", "BulletDrop", "DropRate", "Drop",
+        }
+
+        -- ---- patch table: {table, key, original, kind} ----
+        local patches = {}
+        local seen = {}
+        local counts = {Recoil = 0, Spread = 0, Drop = 0}
+
+        local function addPatch(t, key, kind)
+            local v = rawget(t, key)
+            if v == nil then return end
+            if type(v) ~= "number" and typeof(v) ~= "Vector2" and typeof(v) ~= "Vector3" then return end
+            seen[t] = seen[t] or {}
+            if seen[t][key] then return end
+            seen[t][key] = true
+            patches[#patches + 1] = {Table = t, Key = key, Original = v, Kind = kind}
+            counts[kind] = counts[kind] + 1
+        end
+
+        for _, t in pairs(lib.Items) do
+            if type(t) == "table" and t.Type == "Gun" then
+                for _, k in ipairs(RECOIL_FIELDS) do addPatch(t, k, "Recoil") end
+                for _, k in ipairs(SPREAD_FIELDS) do addPatch(t, k, "Spread") end
+                for _, k in ipairs(DROP_FIELDS)   do addPatch(t, k, "Drop")   end
+            end
+        end
+
+        -- ---- apply / restore ----
+        local function apply()
+            local failed = 0
+            for _, p in ipairs(patches) do
+                local v = p.Original
+                if p.Kind == "Recoil" and wx.no_recoil then v = p.Original * 0
+                elseif p.Kind == "Spread" and wx.no_spread then v = p.Original * 0
+                elseif p.Kind == "Drop"   and wx.no_drop   then v = p.Original * 0 end
+                local ok = pcall(function() p.Table[p.Key] = v end)
+                if not ok then failed = failed + 1 end
+            end
+            return failed
+        end
+
+        local function restoreKind(kind)
+            for _, p in ipairs(patches) do
+                if p.Kind == kind then
+                    pcall(function() p.Table[p.Key] = p.Original end)
+                end
+            end
+        end
+
+        -- ---- UI ----
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
+
+        local wxSec = UI.createSection(miscTab, "Weapons", "right")
+        UI.addToggle(wxSec, "No Recoil", false, function(v)
+            wx.no_recoil = v
+            if v then apply() else restoreKind("Recoil") end
+        end)
+        UI.addToggle(wxSec, "No Spread", false, function(v)
+            wx.no_spread = v
+            if v then apply() else restoreKind("Spread") end
+        end)
+        UI.addToggle(wxSec, "No Bullet Drop", false, function(v)
+            wx.no_drop = v
+            if v then apply() else restoreKind("Drop") end
+        end)
+        UI.addLabel = UI.addLabel or function() end -- no-op fallback
+        UI.addButton(wxSec, "Restore All Weapons", function()
+            wx.no_recoil = false; wx.no_spread = false; wx.no_drop = false
+            for _, p in ipairs(patches) do
+                pcall(function() p.Table[p.Key] = p.Original end)
+            end
+        end)
+
+        -- ---- per-frame hold ----
+        RunService.Heartbeat:Connect(function()
+            if wx.no_recoil or wx.no_spread or wx.no_drop then apply() end
+        end)
+    end)
+
     -- Remove the stats/info HUD created by the VM bytecode.
     -- We identify it by requiring BOTH an exact "health" label AND an exact
     -- "damage ratio" label as siblings under the same Frame — this combo is
