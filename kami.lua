@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-05.r6"
+    local KAMI_BUILD = "2026-11-05.r7"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -491598,10 +491598,27 @@ end)
     local _curArrow, _curShadow -- kept as nils so later nil-checks pass
     pcall(function() UserInputService.MouseIconEnabled = true end)
     pcall(function() UserInputService.MouseIcon = "" end)
-    task.spawn(function()
-        for _ = 1, 20 do
+    -- The VM bytecode has its own linoria-cursor task loop (search for
+    -- `userInputService.MouseIconEnabled = false` at line ~5260) that fires
+    -- every RenderStepped while Library.Modal is true. We fight it on every
+    -- frame via RenderStepped:Connect; whichever runs last wins and ours is
+    -- scheduled unconditionally so it always wins once per frame.
+    -- Also neuter Library.Modal so the VM loop's while-check exits.
+    pcall(function()
+        local lib = getgenv().Library
+        if lib then
+            pcall(function() lib.Modal = false end)
+            pcall(function() lib.CantDragForced = true end)
+        end
+    end)
+    RunService.RenderStepped:Connect(function()
+        if UserInputService.MouseIconEnabled ~= true then
             pcall(function() UserInputService.MouseIconEnabled = true end)
-            task.wait(0.5)
+        end
+    end)
+    RunService.Heartbeat:Connect(function()
+        if UserInputService.MouseIconEnabled ~= true then
+            pcall(function() UserInputService.MouseIconEnabled = true end)
         end
     end)
     if false then pcall(function()
