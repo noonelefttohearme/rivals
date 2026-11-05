@@ -489409,10 +489409,44 @@ local __kami_result = runApplication()
 -- [KAMIDERE UI INJECTION]
 -- ============================================================
 ;task.defer(function()
-    local _lin = getgenv().Library
-    if _lin and typeof(_lin.ScreenGui) == "Instance" then
-        _lin.ScreenGui.Enabled = false
+    -- Build tag: bump this when shipping so the console tells us which build loaded.
+    local KAMI_BUILD = "2026-11-05.r4"
+    print("[kamidere] build " .. KAMI_BUILD .. " loaded")
+    -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
+    -- the ScreenGui's Enabled can be set back to true by the VM internally, and
+    -- popup ScreenGuis for ColorPickers/Dropdowns can live in CoreGui, so we
+    -- keep re-disabling for a few seconds and also kill known Linoria names.
+    local function _killLinoria()
+        local lib = getgenv().Library
+        if lib and typeof(lib.ScreenGui) == "Instance" then
+            pcall(function() lib.ScreenGui.Enabled = false end)
+        end
+        local okCG, cg = pcall(function() return game:GetService("CoreGui") end)
+        local playerGuiRef
+        pcall(function() playerGuiRef = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui") end)
+        local roots = {cg and okCG and cg or nil, playerGuiRef}
+        for _, root in ipairs(roots) do
+            for _, child in ipairs(root:GetChildren()) do
+                if child:IsA("ScreenGui") then
+                    local nm = child.Name
+                    if nm ~= "KamidereUI" and nm ~= "KamiderePopup" then
+                        if nm == "Linoria" or nm:find("[Ll]inoria") or nm:find("[Mm]odal") or nm == "LinoriaLib" or nm == "ScreenGui" then
+                            -- only disable, don't destroy — VM may re-bind it
+                            pcall(function() child.Enabled = false end)
+                        end
+                    end
+                end
+            end
+        end
     end
+    -- initial + repeated kills for 10 seconds (VM may finish building after us)
+    _killLinoria()
+    task.spawn(function()
+        for _ = 1, 20 do
+            task.wait(0.5)
+            pcall(_killLinoria)
+        end
+    end)
 
 -- ==============================================================================
 -- [KAMIDERE] FULL SCRIPT (UI + FUNCTIONALITY INTEGRATED)
@@ -490925,17 +490959,11 @@ function UI.addTextBox(container, placeholderText, callback)
 end
 
 function UI.addColorPicker(container, labelText, defaultColor, callback)
-    local presets = {
-        {"Gold (Default)", Color3.fromRGB(215, 180, 65)},
-        {"Crimson",       Color3.fromRGB(225, 185, 60)},
-        {"Purple",        Color3.fromRGB(138, 43, 226)},
-        {"Blue",          Color3.fromRGB(30, 144, 255)},
-        {"Green",         Color3.fromRGB(46, 139, 87)},
-        {"Gold",          Color3.fromRGB(255, 215, 0)},
-        {"Monochrome",    Color3.fromRGB(180, 180, 180)}
-    }
-    local idx = 1
+    local color = defaultColor or Color3.fromRGB(255, 255, 255)
+    local hue, sat, val = Color3.toHSV(color)
+    local alpha = 1
 
+    -- row + swatch (inline in the section)
     local row = Instance.new("Frame")
     row.Name = "ColorPicker_" .. labelText
     row.Size = UDim2.new(1, 0, 0, 26)
@@ -490943,7 +490971,7 @@ function UI.addColorPicker(container, labelText, defaultColor, callback)
     row.Parent = container
 
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0.6, 0, 1, 0)
+    label.Size = UDim2.new(1, -52, 1, 0)
     label.BackgroundTransparency = 1
     label.Text = labelText
     if UI_FONT then pcall(function() label.FontFace = UI_FONT end) end
@@ -490952,28 +490980,316 @@ function UI.addColorPicker(container, labelText, defaultColor, callback)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = row
 
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.38, 0, 1, 0)
-    btn.Position = UDim2.new(0.62, 0, 0, 0)
-    btn.BackgroundColor3 = presets[idx][2]
-    btn.Text = presets[idx][1]
-    if UI_FONT then pcall(function() btn.FontFace = UI_FONT end) end
-    btn.TextSize = 10
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.Parent = row
+    local swatch = Instance.new("TextButton")
+    swatch.Size = UDim2.new(0, 42, 0, 16)
+    swatch.Position = UDim2.new(1, -44, 0.5, -8)
+    swatch.BackgroundColor3 = color
+    swatch.Text = ""
+    swatch.AutoButtonColor = false
+    swatch.Parent = row
+    local swatchCorner = Instance.new("UICorner"); swatchCorner.CornerRadius = UDim.new(0, 3); swatchCorner.Parent = swatch
+    local swatchStroke = Instance.new("UIStroke"); swatchStroke.Color = COLORS.PanelBorder; swatchStroke.Thickness = 1; swatchStroke.Parent = swatch
 
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 0)
-    corner.Parent = btn
+    -- -------- POPUP --------
+    local popup = Instance.new("Frame")
+    popup.Name = "ColorPickerPopup_" .. labelText
+    popup.Size = UDim2.new(0, 232, 0, 242)
+    popup.BackgroundColor3 = COLORS.PanelBg
+    popup.BorderSizePixel = 0
+    popup.Visible = false
+    popup.ZIndex = 500
+    popup.Parent = screenGui
+    local popupCorner = Instance.new("UICorner"); popupCorner.CornerRadius = UDim.new(0, 4); popupCorner.Parent = popup
+    local popupStroke = Instance.new("UIStroke"); popupStroke.Color = COLORS.PanelBorder; popupStroke.Thickness = 1; popupStroke.Parent = popup
 
-    btn.MouseButton1Click:Connect(function()
-        idx = (idx % #presets) + 1
-        btn.BackgroundColor3 = presets[idx][2]
-        btn.Text = presets[idx][1]
-        if callback then callback(presets[idx][2]) end
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -36, 0, 18)
+    title.Position = UDim2.new(0, 8, 0, 4)
+    title.BackgroundTransparency = 1
+    title.Text = labelText:lower()
+    title.TextColor3 = COLORS.TextSecondary
+    title.TextSize = 11
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    if UI_FONT then pcall(function() title.FontFace = UI_FONT end) end
+    title.ZIndex = 501
+    title.Parent = popup
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, 16, 0, 16)
+    closeBtn.Position = UDim2.new(1, -22, 0, 5)
+    closeBtn.BackgroundTransparency = 1
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = COLORS.TextMuted
+    closeBtn.TextSize = 12
+    closeBtn.ZIndex = 510
+    if UI_FONT then pcall(function() closeBtn.FontFace = UI_FONT end) end
+    closeBtn.Parent = popup
+
+    -- SV square
+    local svFrame = Instance.new("Frame")
+    svFrame.Size = UDim2.new(0, 160, 0, 160)
+    svFrame.Position = UDim2.new(0, 8, 0, 26)
+    svFrame.BackgroundColor3 = Color3.fromHSV(hue, 1, 1)
+    svFrame.BorderSizePixel = 0
+    svFrame.ZIndex = 502
+    svFrame.Parent = popup
+    local svCorner = Instance.new("UICorner"); svCorner.CornerRadius = UDim.new(0, 2); svCorner.Parent = svFrame
+
+    local whiteOv = Instance.new("Frame")
+    whiteOv.Size = UDim2.new(1, 0, 1, 0)
+    whiteOv.BackgroundColor3 = Color3.new(1, 1, 1)
+    whiteOv.BorderSizePixel = 0
+    whiteOv.ZIndex = 503
+    whiteOv.Parent = svFrame
+    local whiteCorner = Instance.new("UICorner"); whiteCorner.CornerRadius = UDim.new(0, 2); whiteCorner.Parent = whiteOv
+    local whiteGrad = Instance.new("UIGradient")
+    whiteGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1),
+        NumberSequenceKeypoint.new(1, 0),
+    })
+    whiteGrad.Rotation = 0
+    whiteGrad.Parent = whiteOv
+
+    local blackOv = Instance.new("Frame")
+    blackOv.Size = UDim2.new(1, 0, 1, 0)
+    blackOv.BackgroundColor3 = Color3.new(0, 0, 0)
+    blackOv.BorderSizePixel = 0
+    blackOv.ZIndex = 504
+    blackOv.Parent = svFrame
+    local blackCorner = Instance.new("UICorner"); blackCorner.CornerRadius = UDim.new(0, 2); blackCorner.Parent = blackOv
+    local blackGrad = Instance.new("UIGradient")
+    blackGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1),
+        NumberSequenceKeypoint.new(1, 0),
+    })
+    blackGrad.Rotation = 90
+    blackGrad.Parent = blackOv
+
+    local svCursor = Instance.new("TextLabel")
+    svCursor.Size = UDim2.new(0, 12, 0, 12)
+    svCursor.AnchorPoint = Vector2.new(0.5, 0.5)
+    svCursor.BackgroundTransparency = 1
+    svCursor.Text = "X"
+    svCursor.TextColor3 = Color3.new(1, 1, 1)
+    svCursor.TextStrokeTransparency = 0
+    svCursor.TextSize = 12
+    svCursor.Font = Enum.Font.GothamBold
+    svCursor.ZIndex = 507
+    svCursor.Parent = svFrame
+
+    -- Hue strip
+    local hueFrame = Instance.new("Frame")
+    hueFrame.Size = UDim2.new(0, 14, 0, 160)
+    hueFrame.Position = UDim2.new(0, 178, 0, 26)
+    hueFrame.BackgroundColor3 = Color3.new(1, 1, 1)
+    hueFrame.BorderSizePixel = 0
+    hueFrame.ZIndex = 502
+    hueFrame.Parent = popup
+    local hueCorner = Instance.new("UICorner"); hueCorner.CornerRadius = UDim.new(0, 2); hueCorner.Parent = hueFrame
+    local hueGrad = Instance.new("UIGradient")
+    hueGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.000, Color3.fromRGB(255,   0,   0)),
+        ColorSequenceKeypoint.new(0.166, Color3.fromRGB(255, 255,   0)),
+        ColorSequenceKeypoint.new(0.333, Color3.fromRGB(  0, 255,   0)),
+        ColorSequenceKeypoint.new(0.500, Color3.fromRGB(  0, 255, 255)),
+        ColorSequenceKeypoint.new(0.666, Color3.fromRGB(  0,   0, 255)),
+        ColorSequenceKeypoint.new(0.833, Color3.fromRGB(255,   0, 255)),
+        ColorSequenceKeypoint.new(1.000, Color3.fromRGB(255,   0,   0)),
+    })
+    hueGrad.Rotation = 90
+    hueGrad.Parent = hueFrame
+
+    local hueCursor = Instance.new("Frame")
+    hueCursor.Size = UDim2.new(1, 4, 0, 3)
+    hueCursor.AnchorPoint = Vector2.new(0.5, 0.5)
+    hueCursor.BackgroundColor3 = Color3.new(1, 1, 1)
+    hueCursor.BorderSizePixel = 0
+    hueCursor.ZIndex = 508
+    hueCursor.Parent = hueFrame
+
+    -- Alpha strip (black backdrop + colored gradient to transparent downwards)
+    local alphaFrame = Instance.new("Frame")
+    alphaFrame.Size = UDim2.new(0, 14, 0, 160)
+    alphaFrame.Position = UDim2.new(0, 200, 0, 26)
+    alphaFrame.BackgroundColor3 = Color3.fromRGB(28, 26, 22)
+    alphaFrame.BorderSizePixel = 0
+    alphaFrame.ZIndex = 502
+    alphaFrame.Parent = popup
+    local alphaCorner = Instance.new("UICorner"); alphaCorner.CornerRadius = UDim.new(0, 2); alphaCorner.Parent = alphaFrame
+
+    local alphaOv = Instance.new("Frame")
+    alphaOv.Size = UDim2.new(1, 0, 1, 0)
+    alphaOv.BackgroundColor3 = color
+    alphaOv.BorderSizePixel = 0
+    alphaOv.ZIndex = 503
+    alphaOv.Parent = alphaFrame
+    local alphaOvCorner = Instance.new("UICorner"); alphaOvCorner.CornerRadius = UDim.new(0, 2); alphaOvCorner.Parent = alphaOv
+    local alphaGrad = Instance.new("UIGradient")
+    alphaGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    alphaGrad.Rotation = 90
+    alphaGrad.Parent = alphaOv
+
+    local alphaCursor = Instance.new("Frame")
+    alphaCursor.Size = UDim2.new(1, 4, 0, 3)
+    alphaCursor.AnchorPoint = Vector2.new(0.5, 0.5)
+    alphaCursor.BackgroundColor3 = Color3.new(1, 1, 1)
+    alphaCursor.BorderSizePixel = 0
+    alphaCursor.ZIndex = 508
+    alphaCursor.Parent = alphaFrame
+
+    -- Hex input
+    local hexBox = Instance.new("TextBox")
+    hexBox.Size = UDim2.new(0, 100, 0, 20)
+    hexBox.Position = UDim2.new(0, 8, 0, 196)
+    hexBox.BackgroundColor3 = COLORS.DropdownBg
+    hexBox.TextColor3 = COLORS.TextPrimary
+    hexBox.Text = ""
+    hexBox.TextSize = 11
+    hexBox.ClearTextOnFocus = false
+    if UI_FONT then pcall(function() hexBox.FontFace = UI_FONT end) end
+    hexBox.ZIndex = 505
+    hexBox.Parent = popup
+    local hexCorner = Instance.new("UICorner"); hexCorner.CornerRadius = UDim.new(0, 2); hexCorner.Parent = hexBox
+    local hexStroke = Instance.new("UIStroke"); hexStroke.Color = COLORS.DropdownBorder; hexStroke.Thickness = 1; hexStroke.Parent = hexBox
+
+    -- RGB input
+    local rgbBox = Instance.new("TextBox")
+    rgbBox.Size = UDim2.new(0, 112, 0, 20)
+    rgbBox.Position = UDim2.new(0, 112, 0, 196)
+    rgbBox.BackgroundColor3 = COLORS.DropdownBg
+    rgbBox.TextColor3 = COLORS.TextPrimary
+    rgbBox.Text = ""
+    rgbBox.TextSize = 11
+    rgbBox.ClearTextOnFocus = false
+    if UI_FONT then pcall(function() rgbBox.FontFace = UI_FONT end) end
+    rgbBox.ZIndex = 505
+    rgbBox.Parent = popup
+    local rgbCorner = Instance.new("UICorner"); rgbCorner.CornerRadius = UDim.new(0, 2); rgbCorner.Parent = rgbBox
+    local rgbStroke = Instance.new("UIStroke"); rgbStroke.Color = COLORS.DropdownBorder; rgbStroke.Thickness = 1; rgbStroke.Parent = rgbBox
+
+    -- -------- REFRESH --------
+    local function refresh(fire)
+        color = Color3.fromHSV(hue, sat, val)
+        swatch.BackgroundColor3 = color
+        svFrame.BackgroundColor3 = Color3.fromHSV(hue, 1, 1)
+        svCursor.Position = UDim2.new(sat, 0, 1 - val, 0)
+        hueCursor.Position = UDim2.new(0.5, 0, hue, 0)
+        alphaOv.BackgroundColor3 = color
+        alphaCursor.Position = UDim2.new(0.5, 0, 1 - alpha, 0)
+        hexBox.Text = string.format("#%02X%02X%02X",
+            math.floor(color.R * 255 + 0.5),
+            math.floor(color.G * 255 + 0.5),
+            math.floor(color.B * 255 + 0.5))
+        rgbBox.Text = string.format("%d, %d, %d",
+            math.floor(color.R * 255 + 0.5),
+            math.floor(color.G * 255 + 0.5),
+            math.floor(color.B * 255 + 0.5))
+        if fire and callback then pcall(callback, color, alpha) end
+    end
+
+    -- -------- DRAG --------
+    local function hookDrag(frame, onMove)
+        local dragging = false
+        frame.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                onMove(input.Position)
+            end
+        end)
+        frame.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                onMove(input.Position)
+            end
+        end)
+    end
+
+    hookDrag(svFrame, function(p)
+        local a, s = svFrame.AbsolutePosition, svFrame.AbsoluteSize
+        sat = math.clamp((p.X - a.X) / s.X, 0, 1)
+        val = 1 - math.clamp((p.Y - a.Y) / s.Y, 0, 1)
+        refresh(true)
+    end)
+    hookDrag(hueFrame, function(p)
+        local a, s = hueFrame.AbsolutePosition, hueFrame.AbsoluteSize
+        hue = math.clamp((p.Y - a.Y) / s.Y, 0, 0.999)
+        refresh(true)
+    end)
+    hookDrag(alphaFrame, function(p)
+        local a, s = alphaFrame.AbsolutePosition, alphaFrame.AbsoluteSize
+        alpha = math.clamp(1 - (p.Y - a.Y) / s.Y, 0, 1)
+        refresh(true)
     end)
 
-    return btn
+    hexBox.FocusLost:Connect(function()
+        local t = hexBox.Text:gsub("[^0-9A-Fa-f]", "")
+        if #t == 6 then
+            local r = tonumber(t:sub(1, 2), 16)
+            local g = tonumber(t:sub(3, 4), 16)
+            local b = tonumber(t:sub(5, 6), 16)
+            if r and g and b then
+                hue, sat, val = Color3.toHSV(Color3.fromRGB(r, g, b))
+                refresh(true); return
+            end
+        end
+        refresh(false)
+    end)
+
+    rgbBox.FocusLost:Connect(function()
+        local parts = {}
+        for n in rgbBox.Text:gmatch("%d+") do parts[#parts + 1] = tonumber(n) end
+        if #parts >= 3 then
+            local r = math.clamp(parts[1], 0, 255)
+            local g = math.clamp(parts[2], 0, 255)
+            local b = math.clamp(parts[3], 0, 255)
+            hue, sat, val = Color3.toHSV(Color3.fromRGB(r, g, b))
+            refresh(true); return
+        end
+        refresh(false)
+    end)
+
+    -- -------- OPEN / CLOSE --------
+    local function anchor()
+        local sa, ss = swatch.AbsolutePosition, swatch.AbsoluteSize
+        local pw = popup.AbsoluteSize.X > 0 and popup.AbsoluteSize.X or 232
+        local vp = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+        local x = math.clamp(sa.X + ss.X - pw, 4, vp.X - pw - 4)
+        local y = math.clamp(sa.Y + ss.Y + 4, 4, vp.Y - 246)
+        popup.Position = UDim2.new(0, x, 0, y)
+    end
+    swatch.MouseButton1Click:Connect(function()
+        if popup.Visible then popup.Visible = false
+        else anchor(); popup.Visible = true end
+    end)
+    closeBtn.MouseButton1Click:Connect(function() popup.Visible = false end)
+
+    UserInputService.InputBegan:Connect(function(input, gp)
+        if gp or not popup.Visible then return end
+        if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
+        local mx, my = input.Position.X, input.Position.Y
+        local pa, ps = popup.AbsolutePosition, popup.AbsoluteSize
+        local sa, ss = swatch.AbsolutePosition, swatch.AbsoluteSize
+        local inPopup  = mx >= pa.X and mx <= pa.X + ps.X and my >= pa.Y and my <= pa.Y + ps.Y
+        local inSwatch = mx >= sa.X and mx <= sa.X + ss.X and my >= sa.Y and my <= sa.Y + ss.Y
+        if not inPopup and not inSwatch then popup.Visible = false end
+    end)
+
+    refresh(false)
+
+    return {
+        setColor = function(c) hue, sat, val = Color3.toHSV(c); refresh(false) end,
+        getColor = function() return color end,
+        setAlpha = function(a) alpha = math.clamp(a, 0, 1); refresh(false) end,
+        getAlpha = function() return alpha end,
+        Instance = swatch,
+    }
 end
 
 local FONT_APPLIED = {}
@@ -491454,9 +491770,29 @@ end)
                 end
             end
 
+            -- Prefixes whose entire category should be hidden from the UI.
+            -- Match by substring on prefix too (not just exact) in case the VM
+            -- registers keys under unexpected naming like dmgnums_ or dmgnum_.
+            local _HIDE_EXACT = {damage=true, damagenumber=true, damagenumbers=true, dmg=true, dmgnumber=true, dmgnumbers=true, dmgnum=true, dmgnums=true, dn=true}
+            local function _HIDE_PREFIX_FN(p)
+                if _HIDE_EXACT[p] then return true end
+                local lp = p:lower()
+                if lp:find("damage") or lp:find("dmgnum") or lp:find("damnum") then return true end
+                return false
+            end
+
+            -- Table-shaped so the render loop can also cheaply skip (below).
+            local _HIDE_PREFIX = setmetatable({}, { __index = function(_, k) return _HIDE_PREFIX_FN(k) end })
+
             local _claimed = {}
             for _,g in ipairs(_tabGroups) do for _,p in ipairs(g.prefixes) do _claimed[p]=true end end
-            for prefix in pairs(_buckets) do if not _claimed[prefix] then table.insert(_tabGroups[4].prefixes, prefix) end end
+            for prefix in pairs(_buckets) do
+                if _HIDE_PREFIX_FN(prefix) then
+                    warn("[kamidere] hiding category: " .. prefix .. " (display=" .. tostring(_prefixDisp[prefix]) .. ")")
+                elseif not _claimed[prefix] then
+                    table.insert(_tabGroups[4].prefixes, prefix)
+                end
+            end
 
             local function _addSec(container, bucket)
                 local b=_buckets[bucket]; if not b then return end
@@ -491485,7 +491821,23 @@ end)
                 end
                 for _,k in ipairs(b.o) do
                     local obj=_O[k]; if not obj then continue end
-                    if type(obj.Values)=="table" and #obj.Values>0 then
+                    local isColor = (typeof(obj.Value)=="Color3")
+                        or (obj.Type=="ColorPicker")
+                        or (type(obj.Value)=="table" and obj.Value.R and obj.Value.G and obj.Value.B)
+                        or (k:lower():find("_col") ~= nil)
+                        or (k:lower():find("color") ~= nil and type(obj.Value)~="string" and type(obj.Values)~="table")
+                    if isColor then
+                        local initial = obj.Value
+                        if typeof(initial) ~= "Color3" then
+                            if type(initial)=="table" and initial.R and initial.G and initial.B then
+                                initial = Color3.new(tonumber(initial.R) or 0, tonumber(initial.G) or 0, tonumber(initial.B) or 0)
+                            else
+                                initial = Color3.fromRGB(255, 255, 255)
+                            end
+                        end
+                        local _cr=UI.addColorPicker(container,lbl(k),initial,function(c) _activate(k,"Options",c) end)
+                        if _cr and _cr.setColor then _uiRefs[k]=function(v) if typeof(v)=="Color3" then _cr.setColor(v) end end end
+                    elseif type(obj.Values)=="table" and #obj.Values>0 then
                         local sv={}; for _,x in ipairs(obj.Values) do if type(x)=="string" then sv[#sv+1]=x end end
                         if #sv>0 then local _dr=UI.addDropdown(container,lbl(k),sv,type(obj.Value)=="string" and obj.Value or sv[1],function(v) _activate(k,"Options",v) end); if _dr then _uiRefs[k]=function(v) _dr.setValue(v) end end end
                     elseif tonumber(obj.Min) or tonumber(obj.Max) or tonumber(obj.Value) then
@@ -491500,6 +491852,7 @@ end)
             for i=1,4 do
                 local g=_tabGroups[i]; local tabObj=_tabObjects[i]
                 for _,prefix in ipairs(g.prefixes) do
+                    if _HIDE_PREFIX[prefix] then continue end
                     local b=_buckets[prefix]
                     if b and (#b.t>0 or #b.o>0 or #b.kb>0) then
                         local sec=UI.createSection(tabObj, _prefixDisp[prefix] or prefix:sub(1,1):upper()..prefix:sub(2))
@@ -491510,6 +491863,921 @@ end)
             if _total == 0 then
             end
         end)
+    end)
+
+    -- ============================================================
+    -- [HIT EFFECTS + HIT SOUNDS] - plaintext, operator-editable
+    -- Edit HIT_EFFECTS_ORDER / HIT_SOUNDS_ORDER / HIT_SOUND_IDS /
+    -- EFFECTS[...] below to add, rename, or swap entries.
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: hit-effects+sounds starting")
+        task.wait(3) -- let the auto-populate pass finish first
+
+        local TweenService_HX  = game:GetService("TweenService")
+        local Debris_HX        = game:GetService("Debris")
+
+        -- ------------------- CATALOGS (edit freely) -------------------
+        local HIT_EFFECTS_ORDER = {
+            "Ball", "Diamond", "Explosion", "Fire", "Smoke",
+            "Confetti", "Sparkles", "Shockwave", "Lightning", "Pop",
+            "Ring", "Star", "Heart", "Energy", "Blood",
+            "Crit Text", "Bubble", "Meteor", "Rose", "Void",
+        }
+
+        local HIT_SOUNDS_ORDER = {
+            "Bonk", "Oof", "Minecraft", "Rust", "Pop",
+            "Anime Punch", "Skeet", "Nebula", "Vine Boom", "Metal Pipe",
+            "Discord Ping", "Bruh", "Fortnite Death", "Osu Hit", "Kirby",
+            "Hyperhit", "Tf2 Hit", "Deep Bass", "Glass", "Ding",
+        }
+
+        local HIT_SOUND_IDS = {
+            ["Bonk"]            = "rbxassetid://6826617738",
+            ["Oof"]             = "rbxassetid://5543191254",
+            ["Minecraft"]       = "rbxassetid://7384271040",
+            ["Rust"]            = "rbxassetid://6541725837",
+            ["Pop"]             = "rbxassetid://6895079853",
+            ["Anime Punch"]     = "rbxassetid://5751043737",
+            ["Skeet"]           = "rbxassetid://7093750382",
+            ["Nebula"]          = "rbxassetid://7249033956",
+            ["Vine Boom"]       = "rbxassetid://5153947961",
+            ["Metal Pipe"]      = "rbxassetid://5478359253",
+            ["Discord Ping"]    = "rbxassetid://5162226106",
+            ["Bruh"]            = "rbxassetid://4624277062",
+            ["Fortnite Death"]  = "rbxassetid://5478360068",
+            ["Osu Hit"]         = "rbxassetid://5215929020",
+            ["Kirby"]           = "rbxassetid://6563101997",
+            ["Hyperhit"]        = "rbxassetid://9068897577",
+            ["Tf2 Hit"]         = "rbxassetid://611403141",
+            ["Deep Bass"]       = "rbxassetid://180083194",
+            ["Glass"]           = "rbxassetid://5174219111",
+            ["Ding"]            = "rbxassetid://7302080645",
+        }
+
+        -- ------------------- STATE -------------------
+        local hx = {
+            fx_enabled     = false,
+            fx_name        = "Ball",
+            fx_color       = Color3.fromRGB(215, 180, 65),
+            fx_size        = 2.0,
+            fx_lifetime    = 1.0,
+            fx_team_check  = true,
+            snd_enabled    = false,
+            snd_name       = "Bonk",
+            snd_volume     = 1.0,
+            snd_team_check = true,
+        }
+
+        -- ------------------- HELPERS -------------------
+        local function mkPart(cf, color, size, trans)
+            local p = Instance.new("Part")
+            p.Anchored     = true
+            p.CanCollide   = false
+            p.CanQuery     = false
+            p.CanTouch     = false
+            p.CastShadow   = false
+            p.Material     = Enum.Material.Neon
+            p.Color        = color
+            p.Transparency = trans or 0
+            p.Size         = typeof(size) == "Vector3" and size or Vector3.new(size, size, size)
+            p.CFrame       = cf
+            p.Parent       = workspace
+            return p
+        end
+
+        local function tw(obj, time, goal, style, dir)
+            local ti = TweenInfo.new(time, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out)
+            TweenService_HX:Create(obj, ti, goal):Play()
+        end
+
+        -- ------------------- EFFECT BUILDERS -------------------
+        local EFFECTS = {}
+
+        EFFECTS["Ball"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, size); p.Shape = Enum.PartType.Ball
+            tw(p, life, {Size = Vector3.new(size*2.4, size*2.4, size*2.4), Transparency = 1})
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Diamond"] = function(cf, color, size, life)
+            local p = mkPart(cf * CFrame.Angles(0, math.pi/4, 0), color, Vector3.new(size, size*1.6, size))
+            tw(p, life, {Size = Vector3.new(size*2, size*3, size*2), Transparency = 1, CFrame = p.CFrame * CFrame.Angles(0, math.pi, 0)})
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Explosion"] = function(cf, color, size, life)
+            local e = Instance.new("Explosion")
+            e.Position       = cf.Position
+            e.BlastRadius    = size * 2
+            e.BlastPressure  = 0
+            e.DestroyJointRadiusPercent = 0
+            e.ExplosionType  = Enum.ExplosionType.NoCraters
+            e.Visible        = true
+            e.Parent         = workspace
+            Debris_HX:AddItem(e, life + 0.2)
+        end
+
+        EFFECTS["Fire"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, 0.1, 1)
+            local fire = Instance.new("Fire")
+            fire.Heat            = size
+            fire.Size            = size * 2
+            fire.Color           = color
+            fire.SecondaryColor  = color
+            fire.Parent          = p
+            task.delay(life, function() if fire.Parent then fire.Enabled = false end end)
+            Debris_HX:AddItem(p, life + 2)
+        end
+
+        EFFECTS["Smoke"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, 0.1, 1)
+            local s = Instance.new("Smoke")
+            s.Color        = color
+            s.Size         = size
+            s.Opacity      = 0.6
+            s.RiseVelocity = size * 2
+            s.Parent       = p
+            task.delay(life, function() if s.Parent then s.Enabled = false end end)
+            Debris_HX:AddItem(p, life + 2)
+        end
+
+        EFFECTS["Confetti"] = function(cf, color, size, life)
+            for _ = 1, 15 do
+                local c = Color3.fromHSV(math.random(), 0.85, 1)
+                local p = mkPart(cf, c, size * 0.2)
+                p.Anchored  = false
+                p.AssemblyLinearVelocity = Vector3.new(math.random(-15,15), math.random(10,25), math.random(-15,15))
+                Debris_HX:AddItem(p, life + 0.3)
+            end
+        end
+
+        EFFECTS["Sparkles"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, 0.1, 1)
+            local sp = Instance.new("Sparkles")
+            sp.SparkleColor = color
+            sp.Parent       = p
+            task.delay(life, function() if sp.Parent then sp.Enabled = false end end)
+            Debris_HX:AddItem(p, life + 2)
+        end
+
+        EFFECTS["Shockwave"] = function(cf, color, size, life)
+            local p = mkPart(cf * CFrame.Angles(0, 0, math.pi/2), color, Vector3.new(size*0.2, size*0.4, size*0.4))
+            p.Shape = Enum.PartType.Cylinder
+            tw(p, life, {Size = Vector3.new(size*0.2, size*6, size*6), Transparency = 1})
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Lightning"] = function(cf, color, size, life)
+            local last = cf.Position + Vector3.new(0, size*4, 0)
+            for i = 1, 6 do
+                local nxt = cf.Position + Vector3.new(math.random(-20,20)/10, size*(4 - i*0.7), math.random(-20,20)/10)
+                local mid = (last + nxt) * 0.5
+                local dist = (nxt - last).Magnitude
+                local p = mkPart(CFrame.lookAt(mid, nxt), color, Vector3.new(size*0.1, size*0.1, dist))
+                tw(p, life, {Transparency = 1})
+                Debris_HX:AddItem(p, life + 0.2)
+                last = nxt
+            end
+        end
+
+        EFFECTS["Pop"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, size*0.5); p.Shape = Enum.PartType.Ball
+            tw(p, life*0.6, {Size = Vector3.new(size*1.6, size*1.6, size*1.6), Transparency = 1}, Enum.EasingStyle.Back)
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Ring"] = function(cf, color, size, life)
+            local p = mkPart(cf * CFrame.Angles(0, 0, math.pi/2), color, Vector3.new(size*0.1, size, size))
+            p.Shape = Enum.PartType.Cylinder
+            tw(p, life, {Size = Vector3.new(size*0.1, size*4, size*4), Transparency = 1}, Enum.EasingStyle.Sine)
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Star"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, size)
+            for _, face in ipairs({Enum.NormalId.Front, Enum.NormalId.Back}) do
+                local d = Instance.new("Decal")
+                d.Texture = "rbxassetid://6023565776"
+                d.Face    = face
+                d.Color3  = color
+                d.Parent  = p
+            end
+            tw(p, life, {Size = Vector3.new(size*2.5, size*2.5, size*2.5), Transparency = 1})
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Heart"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, size)
+            for _, face in ipairs({Enum.NormalId.Front, Enum.NormalId.Back}) do
+                local d = Instance.new("Decal")
+                d.Texture = "rbxassetid://6023565961"
+                d.Face    = face
+                d.Color3  = color
+                d.Parent  = p
+            end
+            tw(p, life, {CFrame = cf + Vector3.new(0, size*2, 0), Size = Vector3.new(size*2.5, size*2.5, size*2.5), Transparency = 1})
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Energy"] = function(cf, color, size, life)
+            for i = 1, 3 do
+                local p = mkPart(cf, color, size * (0.5 + i*0.3), 0.3)
+                p.Shape    = Enum.PartType.Ball
+                p.Material = Enum.Material.ForceField
+                tw(p, life * (1 + i*0.2), {Size = Vector3.new(size*3, size*3, size*3), Transparency = 1})
+                Debris_HX:AddItem(p, life * 2 + 0.2)
+            end
+        end
+
+        EFFECTS["Blood"] = function(cf, color, size, life)
+            for _ = 1, 8 do
+                local p = mkPart(cf, Color3.fromRGB(140, 10, 10), size * 0.2)
+                p.Shape     = Enum.PartType.Ball
+                p.Anchored  = false
+                p.AssemblyLinearVelocity = Vector3.new(math.random(-20,20), math.random(5,20), math.random(-20,20))
+                Debris_HX:AddItem(p, life + 0.3)
+            end
+        end
+
+        EFFECTS["Crit Text"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, 0.1, 1)
+            local gui = Instance.new("BillboardGui")
+            gui.Size          = UDim2.new(0, 140, 0, 46)
+            gui.AlwaysOnTop   = true
+            gui.LightInfluence = 0
+            gui.Parent        = p
+            local label = Instance.new("TextLabel")
+            label.Size                 = UDim2.new(1,0,1,0)
+            label.BackgroundTransparency = 1
+            label.Text                 = "CRIT!"
+            label.TextColor3           = color
+            label.TextStrokeTransparency = 0
+            label.TextStrokeColor3     = Color3.new(0,0,0)
+            label.TextScaled           = true
+            label.Font                 = Enum.Font.GothamBlack
+            label.Parent               = gui
+            tw(p,     life, {CFrame = cf + Vector3.new(0, size*3, 0)})
+            tw(label, life, {TextTransparency = 1, TextStrokeTransparency = 1})
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Bubble"] = function(cf, color, size, life)
+            for _ = 1, 6 do
+                local p = mkPart(cf, color, size * (0.2 + math.random()*0.3), 0.5)
+                p.Shape    = Enum.PartType.Ball
+                p.Material = Enum.Material.Glass
+                tw(p, life, {CFrame = cf + Vector3.new(math.random(-20,20)/10, size*2, math.random(-20,20)/10), Transparency = 1})
+                Debris_HX:AddItem(p, life + 0.2)
+            end
+        end
+
+        EFFECTS["Meteor"] = function(cf, color, size, life)
+            local start = cf + Vector3.new(0, size*8, 0)
+            local p = mkPart(start, color, size); p.Shape = Enum.PartType.Ball
+            local fire = Instance.new("Fire")
+            fire.Heat     = size
+            fire.Size     = size * 2
+            fire.Color    = color
+            fire.Parent   = p
+            tw(p, life, {CFrame = cf, Transparency = 0.5}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+            Debris_HX:AddItem(p, life + 0.3)
+        end
+
+        EFFECTS["Rose"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, size)
+            for _, face in ipairs({Enum.NormalId.Front, Enum.NormalId.Back}) do
+                local d = Instance.new("Decal")
+                d.Texture = "rbxassetid://6023565778"
+                d.Face    = face
+                d.Color3  = color
+                d.Parent  = p
+            end
+            tw(p, life, {CFrame = cf * CFrame.Angles(0, math.pi*2, 0), Size = Vector3.new(size*2, size*2, size*2), Transparency = 1})
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Void"] = function(cf, color, size, life)
+            local p = mkPart(cf, Color3.fromRGB(10, 0, 15), size*2, 0.2)
+            p.Shape    = Enum.PartType.Ball
+            p.Material = Enum.Material.Neon
+            tw(p, life, {Size = Vector3.new(0.1, 0.1, 0.1), Transparency = 1})
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        -- ------------------- PLAYBACK -------------------
+        local function playEffect(cf)
+            local fn = EFFECTS[hx.fx_name]
+            if not fn then return end
+            pcall(fn, cf, hx.fx_color, hx.fx_size, hx.fx_lifetime)
+        end
+
+        local function playSound(cf)
+            local id = HIT_SOUND_IDS[hx.snd_name]
+            if not id then return end
+            local p = mkPart(cf, Color3.new(1,1,1), 0.1, 1)
+            local s = Instance.new("Sound")
+            s.SoundId             = id
+            s.Volume              = hx.snd_volume
+            s.RollOffMode         = Enum.RollOffMode.Linear
+            s.RollOffMaxDistance  = 160
+            s.Parent              = p
+            s:Play()
+            s.Ended:Connect(function() if p.Parent then p:Destroy() end end)
+            Debris_HX:AddItem(p, 6)
+        end
+
+        -- ------------------- UI -------------------
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
+
+        local fxSec = UI.createSection(miscTab, "Hit Effects", "left")
+        UI.addToggle(fxSec, "Hit Effects Enabled", false, function(v) hx.fx_enabled = v end)
+        UI.addDropdown(fxSec, "Effect", HIT_EFFECTS_ORDER, "Ball", function(v) hx.fx_name = v end)
+        UI.addSlider(fxSec, "Size",     0.2, 10, 2, true, function(v) hx.fx_size = v end)
+        UI.addSlider(fxSec, "Lifetime", 0.1,  5, 1, true, function(v) hx.fx_lifetime = v end)
+        UI.addToggle(fxSec, "Only Enemies (FX)", true, function(v) hx.fx_team_check = v end)
+        UI.addColorPicker(fxSec, "Effect Color", hx.fx_color, function(c) hx.fx_color = c end)
+        UI.addButton(fxSec, "Test Effect", function()
+            local ch = client.Character
+            local root = ch and ch:FindFirstChild("HumanoidRootPart")
+            if root then playEffect(root.CFrame + root.CFrame.LookVector * 5) end
+        end)
+
+        local sndSec = UI.createSection(miscTab, "Hit Sounds", "right")
+        UI.addToggle(sndSec, "Hit Sounds Enabled", false, function(v) hx.snd_enabled = v end)
+        UI.addDropdown(sndSec, "Sound", HIT_SOUNDS_ORDER, "Bonk", function(v) hx.snd_name = v end)
+        UI.addSlider(sndSec, "Volume", 0, 5, 1, true, function(v) hx.snd_volume = v end)
+        UI.addToggle(sndSec, "Only Enemies (Sound)", true, function(v) hx.snd_team_check = v end)
+        UI.addButton(sndSec, "Test Sound", function()
+            local ch = client.Character
+            local root = ch and ch:FindFirstChild("HumanoidRootPart")
+            if root then playSound(root.CFrame) end
+        end)
+
+        -- ------------------- HIT DETECTION -------------------
+        local function isEnemy(plr)
+            if plr == client then return false end
+            if plr.Team and client.Team and plr.Team == client.Team then return false end
+            return true
+        end
+
+        local function bindCharacter(plr, char)
+            local hum = char:WaitForChild("Humanoid", 5)
+            if not hum then return end
+            local root = char:WaitForChild("HumanoidRootPart", 5)
+            if not root then return end
+            local last = hum.Health
+            hum:GetPropertyChangedSignal("Health"):Connect(function()
+                local newH = hum.Health
+                if newH < last - 0.05 and newH > 0 then
+                    local enemy = isEnemy(plr)
+                    if hx.fx_enabled and (not hx.fx_team_check or enemy) then
+                        pcall(playEffect, root.CFrame)
+                    end
+                    if hx.snd_enabled and (not hx.snd_team_check or enemy) then
+                        pcall(playSound, root.CFrame)
+                    end
+                end
+                last = newH
+            end)
+        end
+
+        local function bindPlayer(plr)
+            if plr.Character then task.spawn(bindCharacter, plr, plr.Character) end
+            plr.CharacterAdded:Connect(function(c) task.spawn(bindCharacter, plr, c) end)
+        end
+
+        for _, p in ipairs(Players:GetPlayers()) do bindPlayer(p) end
+        Players.PlayerAdded:Connect(bindPlayer)
+        print("[kamidere] addon: hit-effects+sounds section built")
+        end) -- pcall
+        if not __ok then warn("[kamidere] HIT EFFECTS/SOUNDS ERROR: " .. tostring(__err)) end
+    end)
+
+    -- ============================================================
+    -- [INFINITE DASH] - Rivals ItemLibrary cooldown clamp
+    -- Patches ReplicatedStorage.Modules.ItemLibrary items with
+    -- DashCooldown field. Held per-frame so a library reload /
+    -- row rewrite gets overwritten next tick. Full restore on off.
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: infinite-dash starting")
+        task.wait(3)
+
+        local RS_DX = game:GetService("ReplicatedStorage")
+
+        local dx = {
+            enabled          = false,
+            cooldown         = 0.05,
+            speed_override   = false,
+            speed_value      = 100,
+            dur_override     = false,
+            dur_value        = 0.30,
+            toggle_key       = Enum.KeyCode.F8,
+        }
+
+        -- ---- resolve ItemLibrary once, async with retry ----
+        local items
+        local function tryResolve()
+            local ok, result = pcall(function()
+                local mods = RS_DX:FindFirstChild("Modules")
+                if not mods then return nil end
+                local lib = mods:FindFirstChild("ItemLibrary")
+                if not lib then return nil end
+                local IL = require(lib)
+                return IL.Items or IL.items or IL
+            end)
+            if ok then items = result end
+        end
+        for _ = 1, 10 do
+            tryResolve()
+            if items then break end
+            task.wait(1)
+        end
+        if not items then
+            warn("[kami/dash] ItemLibrary not found; dash addon idle")
+            return
+        end
+
+        -- ---- state / snapshot ----
+        local saved = {}
+
+        local function rows()
+            local out = {}
+            for name, it in pairs(items) do
+                if type(it) == "table" and type(it.DashCooldown) == "number" then
+                    out[#out + 1] = { name = name, row = it }
+                end
+            end
+            return out
+        end
+
+        local function stash(row, field)
+            saved[row] = saved[row] or {}
+            if saved[row][field] == nil then
+                saved[row][field] = row[field]
+            end
+        end
+
+        local function apply()
+            local n = 0
+            for _, e in ipairs(rows()) do
+                local row = e.row
+                -- Clamp, don't raise: a naturally faster dash keeps its rate.
+                if row.DashCooldown > dx.cooldown then
+                    stash(row, "DashCooldown")
+                    row.DashCooldown = dx.cooldown
+                end
+                if dx.speed_override and row.DashSpeed ~= dx.speed_value then
+                    stash(row, "DashSpeed")
+                    row.DashSpeed = dx.speed_value
+                end
+                if dx.dur_override and row.DashDuration ~= dx.dur_value then
+                    stash(row, "DashDuration")
+                    row.DashDuration = dx.dur_value
+                end
+                n = n + 1
+            end
+            return n
+        end
+
+        local function restore()
+            for row, fields in pairs(saved) do
+                for field, value in pairs(fields) do
+                    pcall(function() row[field] = value end)
+                end
+            end
+            saved = {}
+        end
+
+        -- ---- UI ----
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
+
+        local dxSec = UI.createSection(miscTab, "Infinite Dash", "left")
+        local dxToggle = UI.addToggle(dxSec, "Infinite Dash Enabled", false, function(v)
+            dx.enabled = v
+            if v then
+                apply()
+            else
+                restore()
+            end
+        end)
+        UI.addSlider(dxSec, "Cooldown Floor", 0.00, 2.00, 0.05, true, function(v) dx.cooldown = v end)
+        UI.addToggle(dxSec, "Override Dash Speed", false, function(v)
+            dx.speed_override = v
+            if not v then
+                for row, fields in pairs(saved) do
+                    if fields.DashSpeed ~= nil then
+                        pcall(function() row.DashSpeed = fields.DashSpeed end)
+                        fields.DashSpeed = nil
+                    end
+                end
+            end
+        end)
+        UI.addSlider(dxSec, "Dash Speed", 10, 500, 100, true, function(v) dx.speed_value = v end)
+        UI.addToggle(dxSec, "Override Dash Duration", false, function(v)
+            dx.dur_override = v
+            if not v then
+                for row, fields in pairs(saved) do
+                    if fields.DashDuration ~= nil then
+                        pcall(function() row.DashDuration = fields.DashDuration end)
+                        fields.DashDuration = nil
+                    end
+                end
+            end
+        end)
+        UI.addSlider(dxSec, "Dash Duration", 0.05, 2.00, 0.30, true, function(v) dx.dur_value = v end)
+        UI.addKeybind(dxSec, "Toggle Dash Key", dx.toggle_key, function(k)
+            dx.toggle_key = k
+        end)
+        UI.addButton(dxSec, "Restore Now", function()
+            restore()
+            if dxToggle and dxToggle.setState then dxToggle.setState(false) end
+            dx.enabled = false
+        end)
+
+        -- ---- keybind listener ----
+        UserInputService.InputBegan:Connect(function(input, gp)
+            if gp then return end
+            if input.KeyCode == dx.toggle_key then
+                dx.enabled = not dx.enabled
+                if dxToggle and dxToggle.setState then dxToggle.setState(dx.enabled) end
+                if dx.enabled then apply() else restore() end
+            end
+        end)
+
+        -- ---- per-frame hold ----
+        RunService.Heartbeat:Connect(function()
+            if not dx.enabled then return end
+            apply()
+        end)
+        print("[kamidere] addon: infinite-dash section built")
+        end) -- pcall
+        if not __ok then warn("[kamidere] INFINITE DASH ERROR: " .. tostring(__err)) end
+    end)
+
+    -- ============================================================
+    -- [WEAPONS] - No Recoil / No Spread / No Bullet Drop
+    -- Patches ReplicatedStorage.Modules.ItemLibrary.Items rows
+    -- where Type=='Gun'. Recoil + Spread mirror the script exactly
+    -- (same field list). Bullet Drop is a defensive sweep of any
+    -- gravity-named numeric/vector field - no-op if the game does
+    -- not expose one.
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: weapons starting")
+        task.wait(3)
+
+        local RS_WX = game:GetService("ReplicatedStorage")
+
+        local wx = {
+            no_recoil = false,
+            no_spread = false,
+            no_drop   = false,
+        }
+
+        -- ---- resolve ItemLibrary ----
+        local lib
+        for _ = 1, 10 do
+            local ok, result = pcall(function()
+                local mods = RS_WX:FindFirstChild("Modules")
+                if not mods then return nil end
+                local il = mods:FindFirstChild("ItemLibrary")
+                if not il then return nil end
+                return require(il)
+            end)
+            if ok and type(result) == "table" then lib = result; break end
+            task.wait(1)
+        end
+        if not lib or type(lib.Items) ~= "table" then
+            warn("[kami/weapons] ItemLibrary.Items not found; weapons addon idle")
+            return
+        end
+
+        -- ---- field schemas ----
+        local RECOIL_FIELDS = {"ShootRecoil", "ShootCameraDisplacementRecoil"}
+        local SPREAD_FIELDS = {"ShootSpread", "ShootSpreadPerVelocityUnit", "ShootSpreadPerVelocityLimit"}
+        local DROP_FIELDS   = {
+            "ShootGravity", "BulletGravity", "ProjectileGravity",
+            "ShootGravityScale", "GravityScale", "Gravity",
+            "ShootDrop", "BulletDrop", "DropRate", "Drop",
+        }
+
+        -- ---- patch table: {table, key, original, kind} ----
+        local patches = {}
+        local seen = {}
+        local counts = {Recoil = 0, Spread = 0, Drop = 0}
+
+        local function addPatch(t, key, kind)
+            local v = rawget(t, key)
+            if v == nil then return end
+            if type(v) ~= "number" and typeof(v) ~= "Vector2" and typeof(v) ~= "Vector3" then return end
+            seen[t] = seen[t] or {}
+            if seen[t][key] then return end
+            seen[t][key] = true
+            patches[#patches + 1] = {Table = t, Key = key, Original = v, Kind = kind}
+            counts[kind] = counts[kind] + 1
+        end
+
+        for _, t in pairs(lib.Items) do
+            if type(t) == "table" and t.Type == "Gun" then
+                for _, k in ipairs(RECOIL_FIELDS) do addPatch(t, k, "Recoil") end
+                for _, k in ipairs(SPREAD_FIELDS) do addPatch(t, k, "Spread") end
+                for _, k in ipairs(DROP_FIELDS)   do addPatch(t, k, "Drop")   end
+            end
+        end
+
+        -- ---- apply / restore ----
+        local function apply()
+            local failed = 0
+            for _, p in ipairs(patches) do
+                local v = p.Original
+                if p.Kind == "Recoil" and wx.no_recoil then v = p.Original * 0
+                elseif p.Kind == "Spread" and wx.no_spread then v = p.Original * 0
+                elseif p.Kind == "Drop"   and wx.no_drop   then v = p.Original * 0 end
+                local ok = pcall(function() p.Table[p.Key] = v end)
+                if not ok then failed = failed + 1 end
+            end
+            return failed
+        end
+
+        local function restoreKind(kind)
+            for _, p in ipairs(patches) do
+                if p.Kind == kind then
+                    pcall(function() p.Table[p.Key] = p.Original end)
+                end
+            end
+        end
+
+        -- ---- UI ----
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
+
+        local wxSec = UI.createSection(miscTab, "Weapons", "right")
+        UI.addToggle(wxSec, "No Recoil", false, function(v)
+            wx.no_recoil = v
+            if v then apply() else restoreKind("Recoil") end
+        end)
+        UI.addToggle(wxSec, "No Spread", false, function(v)
+            wx.no_spread = v
+            if v then apply() else restoreKind("Spread") end
+        end)
+        UI.addToggle(wxSec, "No Bullet Drop", false, function(v)
+            wx.no_drop = v
+            if v then apply() else restoreKind("Drop") end
+        end)
+        UI.addLabel = UI.addLabel or function() end -- no-op fallback
+        UI.addButton(wxSec, "Restore All Weapons", function()
+            wx.no_recoil = false; wx.no_spread = false; wx.no_drop = false
+            for _, p in ipairs(patches) do
+                pcall(function() p.Table[p.Key] = p.Original end)
+            end
+        end)
+
+        -- ---- per-frame hold ----
+        RunService.Heartbeat:Connect(function()
+            if wx.no_recoil or wx.no_spread or wx.no_drop then apply() end
+        end)
+        print("[kamidere] addon: weapons section built")
+        end) -- pcall
+        if not __ok then warn("[kamidere] WEAPONS ERROR: " .. tostring(__err)) end
+    end)
+
+    -- ============================================================
+    -- [VIEW MODEL - Valorant Arms (Jett)]
+    -- Loads an external Roblox asset by id, extracts MeshId +
+    -- TextureID from the first MeshPart inside, and swaps those
+    -- onto the equipped viewmodel's arm MeshParts.
+    --
+    -- Default asset id is the public Jett Valorant Outfit UGC
+    -- (92761079223638). If that reads wrong on the arms, paste a
+    -- different asset id (full Model or raw MeshPart) in the Asset
+    -- ID box and press Apply. Raw Mesh ID + Texture ID overrides
+    -- are honored first when present.
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: viewmodel starting")
+        task.wait(2)
+
+        local Cam = workspace.CurrentCamera
+        if not Cam then
+            local t0 = os.clock()
+            while not workspace.CurrentCamera and os.clock() - t0 < 10 do task.wait(0.25) end
+            Cam = workspace.CurrentCamera
+        end
+        if not Cam then return end
+
+        local vm = {
+            enabled      = false,
+            asset_id     = "92761079223638",   -- Jett Valorant Outfit UGC
+            mesh_id      = "",                 -- direct MeshId override (optional)
+            texture_id   = "",                 -- direct TextureID override (optional)
+            skin_color   = Color3.fromRGB(246, 220, 200),
+            saved        = {}, -- part -> { MeshId, TextureID, Color, Material }
+            resolved     = { mesh = nil, tex = nil }, -- cache after Apply
+        }
+
+        local function classify(name)
+            local n = string.lower(name or "")
+            if n:find("forearm") or n:find("skin") then return "skin" end
+            if n:find("glove") or n:find("sleeve") or n:find("gauntlet") or n:find("wrist") then return "gauntlet" end
+            if n:find("hand") then return "gauntlet" end
+            if n:find("arm") then return "gauntlet" end
+            return nil
+        end
+
+        local function isArmPart(inst)
+            if not inst:IsA("BasePart") then return false end
+            local p = inst
+            for _ = 1, 6 do
+                if not p or p == workspace then return false end
+                if p == Cam then return true end
+                p = p.Parent
+            end
+            return false
+        end
+
+        -- ---- asset resolver: pull first MeshPart's MeshId + TextureID ----
+        local function resolveAsset()
+            -- direct overrides win
+            local mid = (vm.mesh_id    ~= "" and vm.mesh_id)    or nil
+            local tid = (vm.texture_id ~= "" and vm.texture_id) or nil
+            if mid then
+                if not mid:find("://") then mid = "rbxassetid://" .. mid:gsub("%D", "") end
+                if tid and not tid:find("://") then tid = "rbxassetid://" .. tid:gsub("%D", "") end
+                vm.resolved.mesh = mid
+                vm.resolved.tex  = tid or ""
+                return true
+            end
+            -- otherwise load the asset id and walk for a MeshPart
+            local id = (vm.asset_id or ""):gsub("%D", "")
+            if id == "" then return false end
+            local url = "rbxassetid://" .. id
+            local ok, inst = pcall(function()
+                if game.GetObjects then
+                    local objs = game:GetObjects(url)
+                    return objs and objs[1] or nil
+                end
+                return nil
+            end)
+            if not ok or not inst then
+                warn("[kami/viewmodel] failed to load asset " .. url)
+                return false
+            end
+            local picked
+            if inst:IsA("MeshPart") then
+                picked = inst
+            else
+                for _, d in ipairs(inst:GetDescendants()) do
+                    if d:IsA("MeshPart") and d.MeshId ~= "" then picked = d; break end
+                end
+            end
+            if not picked then
+                pcall(function() inst:Destroy() end)
+                warn("[kami/viewmodel] no MeshPart found in asset " .. url)
+                return false
+            end
+            vm.resolved.mesh = picked.MeshId
+            vm.resolved.tex  = picked.TextureID
+            pcall(function() inst:Destroy() end)
+            return true
+        end
+
+        -- ---- swap one part ----
+        local function swap(part, kind)
+            if vm.saved[part] then return end
+            vm.saved[part] = {
+                MeshId    = part:IsA("MeshPart") and part.MeshId or nil,
+                TextureID = part:IsA("MeshPart") and part.TextureID or nil,
+                Color     = part.Color,
+                Material  = part.Material,
+            }
+            pcall(function()
+                if kind == "skin" then
+                    -- leave geometry, just repaint forearm to pale skin
+                    part.Color    = vm.skin_color
+                    part.Material = Enum.Material.Plastic
+                    if part:IsA("MeshPart") then part.TextureID = "" end
+                    return
+                end
+                if part:IsA("MeshPart") and vm.resolved.mesh then
+                    part.MeshId    = vm.resolved.mesh
+                    part.TextureID = vm.resolved.tex or ""
+                    part.Color     = Color3.new(1, 1, 1)
+                end
+            end)
+        end
+
+        local function restorePart(part)
+            local s = vm.saved[part]
+            if not s then return end
+            vm.saved[part] = nil
+            pcall(function()
+                if part:IsA("MeshPart") then
+                    if s.MeshId    ~= nil then part.MeshId    = s.MeshId end
+                    if s.TextureID ~= nil then part.TextureID = s.TextureID end
+                end
+                part.Color    = s.Color
+                part.Material = s.Material
+            end)
+        end
+
+        local function restoreAll()
+            for part in pairs(vm.saved) do restorePart(part) end
+            vm.saved = {}
+        end
+
+        local function sweep()
+            if not vm.enabled then return end
+            for _, d in ipairs(Cam:GetDescendants()) do
+                local kind = classify(d.Name)
+                if kind and isArmPart(d) then swap(d, kind) end
+            end
+        end
+
+        local function applyAndSweep()
+            restoreAll()
+            if not resolveAsset() then
+                warn("[kami/viewmodel] resolve failed - toggle stays visual with skin only")
+                vm.resolved.mesh = nil
+                vm.resolved.tex  = nil
+            end
+            sweep()
+        end
+
+        -- ---- UI ----
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
+
+        local vmSec = UI.createSection(miscTab, "View Model", "right")
+        local vmToggle = UI.addToggle(vmSec, "Valorant Arms (Jett)", false, function(v)
+            vm.enabled = v
+            if v then applyAndSweep() else restoreAll() end
+        end)
+        UI.addTextBox(vmSec, "Asset ID (Model)", function(s)
+            vm.asset_id = (s or ""):gsub("%s", "")
+            if vm.enabled then applyAndSweep() end
+        end)
+        UI.addTextBox(vmSec, "Mesh ID Override", function(s)
+            vm.mesh_id = (s or ""):gsub("%s", "")
+            if vm.enabled then applyAndSweep() end
+        end)
+        UI.addTextBox(vmSec, "Texture ID Override", function(s)
+            vm.texture_id = (s or ""):gsub("%s", "")
+            if vm.enabled then applyAndSweep() end
+        end)
+        UI.addColorPicker(vmSec, "Forearm Skin", vm.skin_color, function(c)
+            vm.skin_color = c
+            if vm.enabled then
+                for part in pairs(vm.saved) do
+                    if classify(part.Name) == "skin" then
+                        pcall(function() part.Color = c end)
+                    end
+                end
+            end
+        end)
+        UI.addButton(vmSec, "Apply / Rescan", function()
+            if vm.enabled then applyAndSweep() end
+        end)
+        UI.addButton(vmSec, "Restore Arms", function()
+            restoreAll()
+            vm.enabled = false
+            if vmToggle and vmToggle.setState then vmToggle.setState(false) end
+        end)
+
+        -- ---- hooks: weapon switch + camera reswap + 3Hz re-sweep ----
+        Cam.DescendantAdded:Connect(function(d)
+            if not vm.enabled then return end
+            local kind = classify(d.Name)
+            if kind and isArmPart(d) then
+                task.defer(function() if vm.enabled then swap(d, kind) end end)
+            end
+        end)
+        Cam.DescendantRemoving:Connect(function(d)
+            if vm.saved[d] then vm.saved[d] = nil end
+        end)
+        workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+            local nc = workspace.CurrentCamera
+            if nc and nc ~= Cam then
+                Cam = nc
+                if vm.enabled then sweep() end
+            end
+        end)
+        local acc = 0
+        RunService.Heartbeat:Connect(function(dt)
+            if not vm.enabled then return end
+            acc = acc + dt
+            if acc >= 0.33 then acc = 0; sweep() end
+        end)
+        print("[kamidere] addon: viewmodel section built")
+        end) -- pcall
+        if not __ok then warn("[kamidere] VIEW MODEL ERROR: " .. tostring(__err)) end
     end)
 
     -- Remove the stats/info HUD created by the VM bytecode.
