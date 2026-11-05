@@ -492464,10 +492464,15 @@ end)
 
     -- ============================================================
     -- [VIEW MODEL - Valorant Arms (Jett)]
-    -- Repaints the equipped Rivals viewmodel arms to Jett's palette:
-    -- teal gauntlet/gloves, pale forearm skin, white accent trim.
-    -- Walks workspace.CurrentCamera descendants, matches arm-named
-    -- BaseParts, stores originals, reapplies on weapon switch.
+    -- Loads an external Roblox asset by id, extracts MeshId +
+    -- TextureID from the first MeshPart inside, and swaps those
+    -- onto the equipped viewmodel's arm MeshParts.
+    --
+    -- Default asset id is the public Jett Valorant Outfit UGC
+    -- (92761079223638). If that reads wrong on the arms, paste a
+    -- different asset id (full Model or raw MeshPart) in the Asset
+    -- ID box and press Apply. Raw Mesh ID + Texture ID overrides
+    -- are honored first when present.
     -- ============================================================
     task.spawn(function()
         task.wait(2)
@@ -492480,17 +492485,14 @@ end)
         end
         if not Cam then return end
 
-        local JETT = {
-            Gauntlet = Color3.fromRGB( 60, 200, 215), -- teal gloves / sleeve
-            Trim     = Color3.fromRGB(240, 240, 245), -- white detailing
-            Skin     = Color3.fromRGB(246, 220, 200), -- pale forearm
-            Accent   = Color3.fromRGB( 35, 100, 115), -- dark teal shadow
-        }
-
         local vm = {
-            enabled = false,
-            tint    = JETT.Gauntlet,
-            saved   = {}, -- part -> { Color, Material, Transparency, TextureID }
+            enabled      = false,
+            asset_id     = "92761079223638",   -- Jett Valorant Outfit UGC
+            mesh_id      = "",                 -- direct MeshId override (optional)
+            texture_id   = "",                 -- direct TextureID override (optional)
+            skin_color   = Color3.fromRGB(246, 220, 200),
+            saved        = {}, -- part -> { MeshId, TextureID, Color, Material }
+            resolved     = { mesh = nil, tex = nil }, -- cache after Apply
         }
 
         local function classify(name)
@@ -492498,20 +492500,12 @@ end)
             if n:find("forearm") or n:find("skin") then return "skin" end
             if n:find("glove") or n:find("sleeve") or n:find("gauntlet") or n:find("wrist") then return "gauntlet" end
             if n:find("hand") then return "gauntlet" end
-            if n:find("arm") then
-                -- "arm" could mean upper arm (gauntlet) or forearm (skin) - default gauntlet
-                return "gauntlet"
-            end
-            if n:find("trim") or n:find("accent") or n:find("stripe") then return "trim" end
+            if n:find("arm") then return "gauntlet" end
             return nil
         end
 
         local function isArmPart(inst)
             if not inst:IsA("BasePart") then return false end
-            local parent = inst.Parent
-            -- Must be under something that looks like a viewmodel: model whose name
-            -- contains "ViewModel", "VM", or lives under the camera.
-            if not parent then return false end
             local p = inst
             for _ = 1, 6 do
                 if not p or p == workspace then return false end
@@ -492521,24 +492515,74 @@ end)
             return false
         end
 
-        local function paint(part, kind)
+        -- ---- asset resolver: pull first MeshPart's MeshId + TextureID ----
+        local function resolveAsset()
+            -- direct overrides win
+            local mid = (vm.mesh_id    ~= "" and vm.mesh_id)    or nil
+            local tid = (vm.texture_id ~= "" and vm.texture_id) or nil
+            if mid then
+                if not mid:find("://") then mid = "rbxassetid://" .. mid:gsub("%D", "") end
+                if tid and not tid:find("://") then tid = "rbxassetid://" .. tid:gsub("%D", "") end
+                vm.resolved.mesh = mid
+                vm.resolved.tex  = tid or ""
+                return true
+            end
+            -- otherwise load the asset id and walk for a MeshPart
+            local id = (vm.asset_id or ""):gsub("%D", "")
+            if id == "" then return false end
+            local url = "rbxassetid://" .. id
+            local ok, inst = pcall(function()
+                if game.GetObjects then
+                    local objs = game:GetObjects(url)
+                    return objs and objs[1] or nil
+                end
+                return nil
+            end)
+            if not ok or not inst then
+                warn("[kami/viewmodel] failed to load asset " .. url)
+                return false
+            end
+            local picked
+            if inst:IsA("MeshPart") then
+                picked = inst
+            else
+                for _, d in ipairs(inst:GetDescendants()) do
+                    if d:IsA("MeshPart") and d.MeshId ~= "" then picked = d; break end
+                end
+            end
+            if not picked then
+                pcall(function() inst:Destroy() end)
+                warn("[kami/viewmodel] no MeshPart found in asset " .. url)
+                return false
+            end
+            vm.resolved.mesh = picked.MeshId
+            vm.resolved.tex  = picked.TextureID
+            pcall(function() inst:Destroy() end)
+            return true
+        end
+
+        -- ---- swap one part ----
+        local function swap(part, kind)
             if vm.saved[part] then return end
             vm.saved[part] = {
-                Color        = part.Color,
-                Material     = part.Material,
-                Transparency = part.Transparency,
-                TextureID    = part:IsA("MeshPart") and part.TextureID or nil,
+                MeshId    = part:IsA("MeshPart") and part.MeshId or nil,
+                TextureID = part:IsA("MeshPart") and part.TextureID or nil,
+                Color     = part.Color,
+                Material  = part.Material,
             }
-            local col
-            if     kind == "gauntlet" then col = vm.tint
-            elseif kind == "trim"     then col = JETT.Trim
-            elseif kind == "skin"     then col = JETT.Skin
-            else                           col = vm.tint end
             pcall(function()
-                part.Color        = col
-                part.Material     = (kind == "skin") and Enum.Material.Plastic or Enum.Material.SmoothPlastic
-                part.Transparency = 0
-                if part:IsA("MeshPart") then part.TextureID = "" end
+                if kind == "skin" then
+                    -- leave geometry, just repaint forearm to pale skin
+                    part.Color    = vm.skin_color
+                    part.Material = Enum.Material.Plastic
+                    if part:IsA("MeshPart") then part.TextureID = "" end
+                    return
+                end
+                if part:IsA("MeshPart") and vm.resolved.mesh then
+                    part.MeshId    = vm.resolved.mesh
+                    part.TextureID = vm.resolved.tex or ""
+                    part.Color     = Color3.new(1, 1, 1)
+                end
             end)
         end
 
@@ -492547,12 +492591,12 @@ end)
             if not s then return end
             vm.saved[part] = nil
             pcall(function()
-                part.Color        = s.Color
-                part.Material     = s.Material
-                part.Transparency = s.Transparency
-                if part:IsA("MeshPart") and s.TextureID ~= nil then
-                    part.TextureID = s.TextureID
+                if part:IsA("MeshPart") then
+                    if s.MeshId    ~= nil then part.MeshId    = s.MeshId end
+                    if s.TextureID ~= nil then part.TextureID = s.TextureID end
                 end
+                part.Color    = s.Color
+                part.Material = s.Material
             end)
         end
 
@@ -492564,13 +492608,19 @@ end)
         local function sweep()
             if not vm.enabled then return end
             for _, d in ipairs(Cam:GetDescendants()) do
-                if d:IsA("BasePart") then
-                    local kind = classify(d.Name)
-                    if kind and isArmPart(d) then
-                        paint(d, kind)
-                    end
-                end
+                local kind = classify(d.Name)
+                if kind and isArmPart(d) then swap(d, kind) end
             end
+        end
+
+        local function applyAndSweep()
+            restoreAll()
+            if not resolveAsset() then
+                warn("[kami/viewmodel] resolve failed - toggle stays visual with skin only")
+                vm.resolved.mesh = nil
+                vm.resolved.tex  = nil
+            end
+            sweep()
         end
 
         -- ---- UI ----
@@ -492580,22 +492630,32 @@ end)
         local vmSec = UI.createSection(miscTab, "View Model", "right")
         local vmToggle = UI.addToggle(vmSec, "Valorant Arms (Jett)", false, function(v)
             vm.enabled = v
-            if v then sweep() else restoreAll() end
+            if v then applyAndSweep() else restoreAll() end
         end)
-        UI.addColorPicker(vmSec, "Gauntlet Tint", vm.tint, function(c)
-            vm.tint = c
+        UI.addTextBox(vmSec, "Asset ID (Model)", function(s)
+            vm.asset_id = (s or ""):gsub("%s", "")
+            if vm.enabled then applyAndSweep() end
+        end)
+        UI.addTextBox(vmSec, "Mesh ID Override", function(s)
+            vm.mesh_id = (s or ""):gsub("%s", "")
+            if vm.enabled then applyAndSweep() end
+        end)
+        UI.addTextBox(vmSec, "Texture ID Override", function(s)
+            vm.texture_id = (s or ""):gsub("%s", "")
+            if vm.enabled then applyAndSweep() end
+        end)
+        UI.addColorPicker(vmSec, "Forearm Skin", vm.skin_color, function(c)
+            vm.skin_color = c
             if vm.enabled then
-                for part, s in pairs(vm.saved) do
-                    -- recolor only parts we painted as gauntlet (not trim / skin)
-                    local kind = classify(part.Name)
-                    if kind == "gauntlet" and part.Color ~= JETT.Trim and part.Color ~= JETT.Skin then
+                for part in pairs(vm.saved) do
+                    if classify(part.Name) == "skin" then
                         pcall(function() part.Color = c end)
                     end
                 end
             end
         end)
-        UI.addButton(vmSec, "Rescan Viewmodel", function()
-            if vm.enabled then sweep() end
+        UI.addButton(vmSec, "Apply / Rescan", function()
+            if vm.enabled then applyAndSweep() end
         end)
         UI.addButton(vmSec, "Restore Arms", function()
             restoreAll()
@@ -492603,20 +492663,17 @@ end)
             if vmToggle and vmToggle.setState then vmToggle.setState(false) end
         end)
 
-        -- ---- DescendantAdded hook for weapon switches ----
+        -- ---- hooks: weapon switch + camera reswap + 3Hz re-sweep ----
         Cam.DescendantAdded:Connect(function(d)
             if not vm.enabled then return end
-            if not d:IsA("BasePart") then return end
             local kind = classify(d.Name)
             if kind and isArmPart(d) then
-                task.defer(function() if vm.enabled then paint(d, kind) end end)
+                task.defer(function() if vm.enabled then swap(d, kind) end end)
             end
         end)
         Cam.DescendantRemoving:Connect(function(d)
             if vm.saved[d] then vm.saved[d] = nil end
         end)
-
-        -- Camera can be replaced on respawn - rehook if that happens.
         workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
             local nc = workspace.CurrentCamera
             if nc and nc ~= Cam then
@@ -492624,8 +492681,6 @@ end)
                 if vm.enabled then sweep() end
             end
         end)
-
-        -- ---- gentle re-sweep (3x / sec) to catch mesh swaps mid-equip ----
         local acc = 0
         RunService.Heartbeat:Connect(function(dt)
             if not vm.enabled then return end
