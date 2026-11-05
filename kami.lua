@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-05.r15"
+    local KAMI_BUILD = "2026-11-05.r16"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -492574,6 +492574,125 @@ end)
     end)
 
     -- ============================================================
+    -- [FORTNITE DAMAGE NUMBERS] - standalone, not from UE
+    -- Hooks every enemy Humanoid's Health. On a damage drop > 0,
+    -- spawns a blue drop-shadowed billboard number at the enemy's
+    -- root position that pops up, drifts upward, and fades. Shows
+    -- the real damage amount dealt.
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: fortnite-damage starting")
+        task.wait(3)
+
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
+
+        local Players_FD = game:GetService("Players")
+        local TweenService_FD = game:GetService("TweenService")
+        local Debris_FD = game:GetService("Debris")
+        local LP_FD = Players_FD.LocalPlayer
+
+        local fd = { enabled = false, team_check = true }
+
+        local function isEnemy(plr)
+            if plr == LP_FD then return false end
+            if plr.Team and LP_FD.Team and plr.Team == LP_FD.Team then return false end
+            return true
+        end
+
+        local function showNumber(cf, amount)
+            local p = Instance.new("Part")
+            p.Anchored = true; p.CanCollide = false; p.CanQuery = false; p.CanTouch = false
+            p.Transparency = 1; p.Size = Vector3.new(0.1, 0.1, 0.1)
+            p.CFrame = cf + Vector3.new(math.random(-15, 15) / 10, math.random(10, 20) / 10, math.random(-15, 15) / 10)
+            p.Parent = workspace
+
+            local gui = Instance.new("BillboardGui")
+            gui.Size = UDim2.new(0, 180, 0, 60)
+            gui.StudsOffset = Vector3.new(0, 0, 0)
+            gui.AlwaysOnTop = true
+            gui.LightInfluence = 0
+            gui.Parent = p
+
+            local label = Instance.new("TextLabel")
+            label.Size = UDim2.new(1, 0, 1, 0)
+            label.BackgroundTransparency = 1
+            label.Text = tostring(math.floor(amount + 0.5))
+            label.TextColor3 = Color3.fromRGB(80, 170, 255)
+            label.TextStrokeColor3 = Color3.fromRGB(0, 0, 40)
+            label.TextStrokeTransparency = 0
+            label.Font = Enum.Font.FredokaOne
+            label.TextScaled = false
+            label.TextSize = 20
+            label.Parent = gui
+
+            -- Pop in: scale 0 -> 1.3 -> 1, drift up, then fade.
+            label.TextSize = 8
+            TweenService_FD:Create(label, TweenInfo.new(0.12, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+                { TextSize = 32 }):Play()
+            task.delay(0.12, function()
+                if not label.Parent then return end
+                TweenService_FD:Create(label, TweenInfo.new(0.08, Enum.EasingStyle.Quad), { TextSize = 26 }):Play()
+            end)
+            TweenService_FD:Create(p, TweenInfo.new(1.0, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                { CFrame = p.CFrame + Vector3.new(0, 4, 0) }):Play()
+            task.delay(0.5, function()
+                if not label.Parent then return end
+                TweenService_FD:Create(label, TweenInfo.new(0.5, Enum.EasingStyle.Quad), {
+                    TextTransparency = 1, TextStrokeTransparency = 1,
+                }):Play()
+            end)
+            Debris_FD:AddItem(p, 1.2)
+        end
+
+        local function bindChar(plr, char)
+            local hum = char:WaitForChild("Humanoid", 5)
+            if not hum then return end
+            local root = char:WaitForChild("HumanoidRootPart", 5)
+            if not root then return end
+            local last = hum.Health
+            hum:GetPropertyChangedSignal("Health"):Connect(function()
+                local new = hum.Health
+                local delta = last - new
+                if fd.enabled and new > 0 and delta > 0.5 then
+                    if not fd.team_check or isEnemy(plr) then
+                        pcall(showNumber, root.CFrame, delta)
+                    end
+                end
+                last = new
+            end)
+        end
+
+        local function bindPlr(plr)
+            if plr.Character then task.spawn(bindChar, plr, plr.Character) end
+            plr.CharacterAdded:Connect(function(c) task.spawn(bindChar, plr, c) end)
+        end
+
+        for _, plr in ipairs(Players_FD:GetPlayers()) do bindPlr(plr) end
+        Players_FD.PlayerAdded:Connect(bindPlr)
+
+        -- UI
+        local fdSec = UI.createSection(miscTab, "Fortnite Damage", "right")
+        UI.addToggle(fdSec, "Damage Numbers", false, function(v) fd.enabled = v end)
+        UI.addToggle(fdSec, "Only Enemies", true, function(v) fd.team_check = v end)
+        UI.addButton(fdSec, "Test Number", function()
+            local char = LP_FD.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                for _ = 1, 3 do
+                    showNumber(hrp.CFrame, math.random(25, 150))
+                    task.wait(0.15)
+                end
+            end
+        end)
+
+        print("[kamidere] addon: fortnite-damage section built")
+        end) -- pcall
+        if not __ok then warn("[kamidere] FORTNITE DAMAGE ERROR: " .. tostring(__err)) end
+    end)
+
+    -- ============================================================
     -- [VIEW MODEL - Valorant Arms (Jett)]
     -- Loads an external Roblox asset by id, extracts MeshId +
     -- TextureID from the first MeshPart inside, and swaps those
@@ -492725,16 +492844,29 @@ end)
             }
             pcall(function()
                 if kind == "skin" then
-                    -- leave geometry, just repaint forearm to pale skin
                     part.Color    = vm.skin_color
                     part.Material = Enum.Material.Plastic
                     if part:IsA("MeshPart") then part.TextureID = "" end
                     return
                 end
-                if part:IsA("MeshPart") and vm.resolved.mesh then
-                    part.MeshId    = vm.resolved.mesh
-                    part.TextureID = vm.resolved.tex or ""
-                    part.Color     = Color3.new(1, 1, 1)
+                if part:IsA("MeshPart") then
+                    -- Try resolved mesh first; if missing, blast the raw asset
+                    -- URL into MeshId and let roblox auto-resolve (often works
+                    -- for UGC catalog ids when the asset is a wearable mesh).
+                    local mesh = vm.resolved.mesh
+                    local tex  = vm.resolved.tex
+                    if not mesh or mesh == "" then
+                        local id = (vm.asset_id or ""):gsub("%D", "")
+                        if id ~= "" then mesh = "rbxassetid://" .. id end
+                    end
+                    if mesh and mesh ~= "" then
+                        local okMesh = pcall(function() part.MeshId = mesh end)
+                        local okTex  = pcall(function() part.TextureID = tex or "" end)
+                        part.Color = Color3.new(1, 1, 1)
+                        if not okMesh then
+                            print(("[kami/viewmodel] MeshId swap REJECTED on %s (part protected?)"):format(part:GetFullName()))
+                        end
+                    end
                 end
             end)
         end
