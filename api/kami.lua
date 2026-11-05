@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-05.r4"
+    local KAMI_BUILD = "2026-11-05.r14"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -489429,9 +489429,12 @@ local __kami_result = runApplication()
             for _, child in ipairs(root:GetChildren()) do
                 if child:IsA("ScreenGui") then
                     local nm = child.Name
-                    if nm ~= "KamidereUI" and nm ~= "KamiderePopup" then
-                        if nm == "Linoria" or nm:find("[Ll]inoria") or nm:find("[Mm]odal") or nm == "LinoriaLib" or nm == "ScreenGui" then
-                            -- only disable, don't destroy — VM may re-bind it
+                    if nm ~= "KamidereUI" and nm ~= "KamiderePopup" and nm ~= "KamidereCursor" then
+                        -- Narrow match only: known Linoria names + obvious modal popups.
+                        -- Do NOT match bare "ScreenGui" - that eats kami's own
+                        -- cursor GUI and any other game-owned ScreenGui without
+                        -- a custom Name set.
+                        if nm == "Linoria" or nm == "LinoriaLib" or nm:find("[Ll]inoria") or nm == "Modal" then
                             pcall(function() child.Enabled = false end)
                         end
                     end
@@ -490958,37 +490961,44 @@ function UI.addTextBox(container, placeholderText, callback)
     return box
 end
 
-function UI.addColorPicker(container, labelText, defaultColor, callback)
+function UI.addColorPicker(container, labelText, defaultColor, callback, preBuiltSwatch)
     local color = defaultColor or Color3.fromRGB(255, 255, 255)
     local hue, sat, val = Color3.toHSV(color)
     local alpha = 1
 
-    -- row + swatch (inline in the section)
-    local row = Instance.new("Frame")
-    row.Name = "ColorPicker_" .. labelText
-    row.Size = UDim2.new(1, 0, 0, 26)
-    row.BackgroundTransparency = 1
-    row.Parent = container
+    local swatch
+    if preBuiltSwatch then
+        -- Caller already laid out the swatch; just mount the popup onto it.
+        swatch = preBuiltSwatch
+        swatch.BackgroundColor3 = color
+    else
+        -- row + swatch (inline in the section)
+        local row = Instance.new("Frame")
+        row.Name = "ColorPicker_" .. labelText
+        row.Size = UDim2.new(1, 0, 0, 26)
+        row.BackgroundTransparency = 1
+        row.Parent = container
 
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -52, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Text = labelText
-    if UI_FONT then pcall(function() label.FontFace = UI_FONT end) end
-    label.TextSize = 11
-    label.TextColor3 = COLORS.TextPrimary
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = row
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, -52, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = labelText
+        if UI_FONT then pcall(function() label.FontFace = UI_FONT end) end
+        label.TextSize = 11
+        label.TextColor3 = COLORS.TextPrimary
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = row
 
-    local swatch = Instance.new("TextButton")
-    swatch.Size = UDim2.new(0, 42, 0, 16)
-    swatch.Position = UDim2.new(1, -44, 0.5, -8)
-    swatch.BackgroundColor3 = color
-    swatch.Text = ""
-    swatch.AutoButtonColor = false
-    swatch.Parent = row
-    local swatchCorner = Instance.new("UICorner"); swatchCorner.CornerRadius = UDim.new(0, 3); swatchCorner.Parent = swatch
-    local swatchStroke = Instance.new("UIStroke"); swatchStroke.Color = COLORS.PanelBorder; swatchStroke.Thickness = 1; swatchStroke.Parent = swatch
+        swatch = Instance.new("TextButton")
+        swatch.Size = UDim2.new(0, 42, 0, 16)
+        swatch.Position = UDim2.new(1, -44, 0.5, -8)
+        swatch.BackgroundColor3 = color
+        swatch.Text = ""
+        swatch.AutoButtonColor = false
+        swatch.Parent = row
+        local swatchCorner = Instance.new("UICorner"); swatchCorner.CornerRadius = UDim.new(0, 3); swatchCorner.Parent = swatch
+        local swatchStroke = Instance.new("UIStroke"); swatchStroke.Color = COLORS.PanelBorder; swatchStroke.Thickness = 1; swatchStroke.Parent = swatch
+    end
 
     -- -------- POPUP --------
     local popup = Instance.new("Frame")
@@ -491292,6 +491302,49 @@ function UI.addColorPicker(container, labelText, defaultColor, callback)
     }
 end
 
+-- Render N color pickers on a single row with one shared label and
+-- N compact swatches side-by-side. Each swatch opens its own picker
+-- popup via UI.addColorPicker with pre-built swatches.
+-- entries: array of { initial = Color3, callback = function(c, alpha) }
+function UI.addColorGroup(container, labelText, entries)
+    local n = #entries
+    local sw, sp = 20, 4 -- swatch width + spacing
+    local totalW = n * sw + (n - 1) * sp
+
+    local row = Instance.new("Frame")
+    row.Name = "ColorGroup_" .. labelText
+    row.Size = UDim2.new(1, 0, 0, 26)
+    row.BackgroundTransparency = 1
+    row.Parent = container
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -(totalW + 8), 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = labelText
+    if UI_FONT then pcall(function() label.FontFace = UI_FONT end) end
+    label.TextSize = 11
+    label.TextColor3 = COLORS.TextPrimary
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = row
+
+    local handles = {}
+    for i = 1, n do
+        local entry = entries[i]
+        local swatch = Instance.new("TextButton")
+        swatch.Size = UDim2.new(0, sw, 0, 14)
+        local rightOffset = (n - i) * (sw + sp) + 4
+        swatch.Position = UDim2.new(1, -rightOffset - sw, 0.5, -7)
+        swatch.Text = ""
+        swatch.AutoButtonColor = false
+        swatch.Parent = row
+        local sc = Instance.new("UICorner"); sc.CornerRadius = UDim.new(0, 2); sc.Parent = swatch
+        local ss = Instance.new("UIStroke"); ss.Color = COLORS.PanelBorder; ss.Thickness = 1; ss.Parent = swatch
+
+        handles[i] = UI.addColorPicker(nil, labelText .. " " .. i, entry.initial, entry.callback, swatch)
+    end
+    return handles
+end
+
 local FONT_APPLIED = {}
 local function applyUIFont(object)
     if not (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) then
@@ -491587,10 +491640,40 @@ end)
 
     local _menuOpen = true
 
-    -- Custom cursor
-    local _curArrow, _curShadow
+    -- Custom cursor DISABLED: operator preferred the stock roblox cursor.
+    -- The old custom pixel-art cursor set MouseIconEnabled = false every
+    -- frame via RenderStepped, which fought any manual re-enable from the
+    -- dev console. Force it back on, keep it on, and skip the whole
+    -- custom-cursor builder below.
+    local _curArrow, _curShadow -- kept as nils so later nil-checks pass
+    pcall(function() UserInputService.MouseIconEnabled = true end)
+    pcall(function() UserInputService.MouseIcon = "" end)
+    -- The VM bytecode has its own linoria-cursor task loop (search for
+    -- `userInputService.MouseIconEnabled = false` at line ~5260) that fires
+    -- every RenderStepped while Library.Modal is true. We fight it on every
+    -- frame via RenderStepped:Connect; whichever runs last wins and ours is
+    -- scheduled unconditionally so it always wins once per frame.
+    -- Also neuter Library.Modal so the VM loop's while-check exits.
     pcall(function()
+        local lib = getgenv().Library
+        if lib then
+            pcall(function() lib.Modal = false end)
+            pcall(function() lib.CantDragForced = true end)
+        end
+    end)
+    RunService.RenderStepped:Connect(function()
+        if UserInputService.MouseIconEnabled ~= true then
+            pcall(function() UserInputService.MouseIconEnabled = true end)
+        end
+    end)
+    RunService.Heartbeat:Connect(function()
+        if UserInputService.MouseIconEnabled ~= true then
+            pcall(function() UserInputService.MouseIconEnabled = true end)
+        end
+    end)
+    if false then pcall(function()
         local _curGui = Instance.new("ScreenGui")
+        _curGui.Name = "KamidereCursor"
         _curGui.DisplayOrder = 99999; _curGui.IgnoreGuiInset = true
         _curGui.ResetOnSpawn = false; _curGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
         local _cgOk, _cg = pcall(function() return game:GetService("CoreGui") end)
@@ -491672,7 +491755,7 @@ end)
         end
         RunService.RenderStepped:Connect(_updateCursor)
         RunService.Heartbeat:Connect(_updateCursor)
-    end)
+    end) end -- end of `if false then pcall(function() ... end) end` dead-code block
 
     local function _showMenu(visible)
         _menuOpen = visible
@@ -491819,22 +491902,74 @@ end)
                     local obj=_O[k]; if not obj then continue end
                     UI.addKeybind(container, lbl(k), _resolveKey(obj), function(key) _activate(k,"Options",key) end)
                 end
+                -- Pre-scan for color_N groups (e.g. color_1..color_4, color1..color3)
+                -- so stacked color pickers get rendered as a single tight row.
+                local _colorGroups, _skipKey = {}, {}
+                do
+                    local tmp = {}
+                    for _, k in ipairs(b.o) do
+                        local base, idx = k:lower():match("^(.-)color_?(%d+)$")
+                        if base and idx then
+                            tmp[base] = tmp[base] or {}
+                            table.insert(tmp[base], { key = k, idx = tonumber(idx) })
+                        end
+                    end
+                    for base, members in pairs(tmp) do
+                        if #members >= 2 then
+                            table.sort(members, function(a, bb) return a.idx < bb.idx end)
+                            _colorGroups[members[1].key] = members
+                            for i = 2, #members do _skipKey[members[i].key] = true end
+                        end
+                    end
+                end
+
+                local function _toColor3(v)
+                    if typeof(v) == "Color3" then return v end
+                    if type(v) == "table" and v.R and v.G and v.B then
+                        return Color3.new(tonumber(v.R) or 0, tonumber(v.G) or 0, tonumber(v.B) or 0)
+                    end
+                    return Color3.fromRGB(255, 255, 255)
+                end
+
                 for _,k in ipairs(b.o) do
+                    if _skipKey[k] then continue end
                     local obj=_O[k]; if not obj then continue end
-                    local isColor = (typeof(obj.Value)=="Color3")
+                    local group = _colorGroups[k]
+                    if group then
+                        -- Build the group label: strip the trailing 'Color N' from
+                        -- the first member's label and replace with 'Colors'.
+                        local base = lbl(k):gsub("[Cc]olor%s*%d+%s*$", ""):gsub("%s+$", "")
+                        local groupLabel = (base ~= "" and (base .. " Colors") or "Colors")
+                        local entries = {}
+                        for _, m in ipairs(group) do
+                            local gobj = _O[m.key]
+                            if gobj then
+                                local mk = m.key
+                                table.insert(entries, {
+                                    initial  = _toColor3(gobj.Value),
+                                    callback = function(c) _activate(mk, "Options", c) end,
+                                })
+                            end
+                        end
+                        if #entries > 0 then
+                            local _grs = UI.addColorGroup(container, groupLabel, entries)
+                            if _grs then
+                                for i, m in ipairs(group) do
+                                    local h = _grs[i]
+                                    if h and h.setColor then
+                                        local mk = m.key
+                                        _uiRefs[mk] = function(v) if typeof(v)=="Color3" then h.setColor(v) end end
+                                    end
+                                end
+                            end
+                        end
+                    elseif (typeof(obj.Value)=="Color3")
                         or (obj.Type=="ColorPicker")
                         or (type(obj.Value)=="table" and obj.Value.R and obj.Value.G and obj.Value.B)
                         or (k:lower():find("_col") ~= nil)
                         or (k:lower():find("color") ~= nil and type(obj.Value)~="string" and type(obj.Values)~="table")
-                    if isColor then
-                        local initial = obj.Value
-                        if typeof(initial) ~= "Color3" then
-                            if type(initial)=="table" and initial.R and initial.G and initial.B then
-                                initial = Color3.new(tonumber(initial.R) or 0, tonumber(initial.G) or 0, tonumber(initial.B) or 0)
-                            else
-                                initial = Color3.fromRGB(255, 255, 255)
-                            end
-                        end
+                    then
+                        local initial = _toColor3(obj.Value)
                         local _cr=UI.addColorPicker(container,lbl(k),initial,function(c) _activate(k,"Options",c) end)
                         if _cr and _cr.setColor then _uiRefs[k]=function(v) if typeof(v)=="Color3" then _cr.setColor(v) end end end
                     elseif type(obj.Values)=="table" and #obj.Values>0 then
@@ -491865,396 +492000,6 @@ end)
         end)
     end)
 
-    -- ============================================================
-    -- [HIT EFFECTS + HIT SOUNDS] - plaintext, operator-editable
-    -- Edit HIT_EFFECTS_ORDER / HIT_SOUNDS_ORDER / HIT_SOUND_IDS /
-    -- EFFECTS[...] below to add, rename, or swap entries.
-    -- ============================================================
-    task.spawn(function()
-        local __ok, __err = pcall(function()
-        print("[kamidere] addon: hit-effects+sounds starting")
-        task.wait(3) -- let the auto-populate pass finish first
-
-        local TweenService_HX  = game:GetService("TweenService")
-        local Debris_HX        = game:GetService("Debris")
-
-        -- ------------------- CATALOGS (edit freely) -------------------
-        local HIT_EFFECTS_ORDER = {
-            "Ball", "Diamond", "Explosion", "Fire", "Smoke",
-            "Confetti", "Sparkles", "Shockwave", "Lightning", "Pop",
-            "Ring", "Star", "Heart", "Energy", "Blood",
-            "Crit Text", "Bubble", "Meteor", "Rose", "Void",
-        }
-
-        local HIT_SOUNDS_ORDER = {
-            "Bonk", "Oof", "Minecraft", "Rust", "Pop",
-            "Anime Punch", "Skeet", "Nebula", "Vine Boom", "Metal Pipe",
-            "Discord Ping", "Bruh", "Fortnite Death", "Osu Hit", "Kirby",
-            "Hyperhit", "Tf2 Hit", "Deep Bass", "Glass", "Ding",
-        }
-
-        local HIT_SOUND_IDS = {
-            ["Bonk"]            = "rbxassetid://6826617738",
-            ["Oof"]             = "rbxassetid://5543191254",
-            ["Minecraft"]       = "rbxassetid://7384271040",
-            ["Rust"]            = "rbxassetid://6541725837",
-            ["Pop"]             = "rbxassetid://6895079853",
-            ["Anime Punch"]     = "rbxassetid://5751043737",
-            ["Skeet"]           = "rbxassetid://7093750382",
-            ["Nebula"]          = "rbxassetid://7249033956",
-            ["Vine Boom"]       = "rbxassetid://5153947961",
-            ["Metal Pipe"]      = "rbxassetid://5478359253",
-            ["Discord Ping"]    = "rbxassetid://5162226106",
-            ["Bruh"]            = "rbxassetid://4624277062",
-            ["Fortnite Death"]  = "rbxassetid://5478360068",
-            ["Osu Hit"]         = "rbxassetid://5215929020",
-            ["Kirby"]           = "rbxassetid://6563101997",
-            ["Hyperhit"]        = "rbxassetid://9068897577",
-            ["Tf2 Hit"]         = "rbxassetid://611403141",
-            ["Deep Bass"]       = "rbxassetid://180083194",
-            ["Glass"]           = "rbxassetid://5174219111",
-            ["Ding"]            = "rbxassetid://7302080645",
-        }
-
-        -- ------------------- STATE -------------------
-        local hx = {
-            fx_enabled     = false,
-            fx_name        = "Ball",
-            fx_color       = Color3.fromRGB(215, 180, 65),
-            fx_size        = 2.0,
-            fx_lifetime    = 1.0,
-            fx_team_check  = true,
-            snd_enabled    = false,
-            snd_name       = "Bonk",
-            snd_volume     = 1.0,
-            snd_team_check = true,
-        }
-
-        -- ------------------- HELPERS -------------------
-        local function mkPart(cf, color, size, trans)
-            local p = Instance.new("Part")
-            p.Anchored     = true
-            p.CanCollide   = false
-            p.CanQuery     = false
-            p.CanTouch     = false
-            p.CastShadow   = false
-            p.Material     = Enum.Material.Neon
-            p.Color        = color
-            p.Transparency = trans or 0
-            p.Size         = typeof(size) == "Vector3" and size or Vector3.new(size, size, size)
-            p.CFrame       = cf
-            p.Parent       = workspace
-            return p
-        end
-
-        local function tw(obj, time, goal, style, dir)
-            local ti = TweenInfo.new(time, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out)
-            TweenService_HX:Create(obj, ti, goal):Play()
-        end
-
-        -- ------------------- EFFECT BUILDERS -------------------
-        local EFFECTS = {}
-
-        EFFECTS["Ball"] = function(cf, color, size, life)
-            local p = mkPart(cf, color, size); p.Shape = Enum.PartType.Ball
-            tw(p, life, {Size = Vector3.new(size*2.4, size*2.4, size*2.4), Transparency = 1})
-            Debris_HX:AddItem(p, life + 0.2)
-        end
-
-        EFFECTS["Diamond"] = function(cf, color, size, life)
-            local p = mkPart(cf * CFrame.Angles(0, math.pi/4, 0), color, Vector3.new(size, size*1.6, size))
-            tw(p, life, {Size = Vector3.new(size*2, size*3, size*2), Transparency = 1, CFrame = p.CFrame * CFrame.Angles(0, math.pi, 0)})
-            Debris_HX:AddItem(p, life + 0.2)
-        end
-
-        EFFECTS["Explosion"] = function(cf, color, size, life)
-            local e = Instance.new("Explosion")
-            e.Position       = cf.Position
-            e.BlastRadius    = size * 2
-            e.BlastPressure  = 0
-            e.DestroyJointRadiusPercent = 0
-            e.ExplosionType  = Enum.ExplosionType.NoCraters
-            e.Visible        = true
-            e.Parent         = workspace
-            Debris_HX:AddItem(e, life + 0.2)
-        end
-
-        EFFECTS["Fire"] = function(cf, color, size, life)
-            local p = mkPart(cf, color, 0.1, 1)
-            local fire = Instance.new("Fire")
-            fire.Heat            = size
-            fire.Size            = size * 2
-            fire.Color           = color
-            fire.SecondaryColor  = color
-            fire.Parent          = p
-            task.delay(life, function() if fire.Parent then fire.Enabled = false end end)
-            Debris_HX:AddItem(p, life + 2)
-        end
-
-        EFFECTS["Smoke"] = function(cf, color, size, life)
-            local p = mkPart(cf, color, 0.1, 1)
-            local s = Instance.new("Smoke")
-            s.Color        = color
-            s.Size         = size
-            s.Opacity      = 0.6
-            s.RiseVelocity = size * 2
-            s.Parent       = p
-            task.delay(life, function() if s.Parent then s.Enabled = false end end)
-            Debris_HX:AddItem(p, life + 2)
-        end
-
-        EFFECTS["Confetti"] = function(cf, color, size, life)
-            for _ = 1, 15 do
-                local c = Color3.fromHSV(math.random(), 0.85, 1)
-                local p = mkPart(cf, c, size * 0.2)
-                p.Anchored  = false
-                p.AssemblyLinearVelocity = Vector3.new(math.random(-15,15), math.random(10,25), math.random(-15,15))
-                Debris_HX:AddItem(p, life + 0.3)
-            end
-        end
-
-        EFFECTS["Sparkles"] = function(cf, color, size, life)
-            local p = mkPart(cf, color, 0.1, 1)
-            local sp = Instance.new("Sparkles")
-            sp.SparkleColor = color
-            sp.Parent       = p
-            task.delay(life, function() if sp.Parent then sp.Enabled = false end end)
-            Debris_HX:AddItem(p, life + 2)
-        end
-
-        EFFECTS["Shockwave"] = function(cf, color, size, life)
-            local p = mkPart(cf * CFrame.Angles(0, 0, math.pi/2), color, Vector3.new(size*0.2, size*0.4, size*0.4))
-            p.Shape = Enum.PartType.Cylinder
-            tw(p, life, {Size = Vector3.new(size*0.2, size*6, size*6), Transparency = 1})
-            Debris_HX:AddItem(p, life + 0.2)
-        end
-
-        EFFECTS["Lightning"] = function(cf, color, size, life)
-            local last = cf.Position + Vector3.new(0, size*4, 0)
-            for i = 1, 6 do
-                local nxt = cf.Position + Vector3.new(math.random(-20,20)/10, size*(4 - i*0.7), math.random(-20,20)/10)
-                local mid = (last + nxt) * 0.5
-                local dist = (nxt - last).Magnitude
-                local p = mkPart(CFrame.lookAt(mid, nxt), color, Vector3.new(size*0.1, size*0.1, dist))
-                tw(p, life, {Transparency = 1})
-                Debris_HX:AddItem(p, life + 0.2)
-                last = nxt
-            end
-        end
-
-        EFFECTS["Pop"] = function(cf, color, size, life)
-            local p = mkPart(cf, color, size*0.5); p.Shape = Enum.PartType.Ball
-            tw(p, life*0.6, {Size = Vector3.new(size*1.6, size*1.6, size*1.6), Transparency = 1}, Enum.EasingStyle.Back)
-            Debris_HX:AddItem(p, life + 0.2)
-        end
-
-        EFFECTS["Ring"] = function(cf, color, size, life)
-            local p = mkPart(cf * CFrame.Angles(0, 0, math.pi/2), color, Vector3.new(size*0.1, size, size))
-            p.Shape = Enum.PartType.Cylinder
-            tw(p, life, {Size = Vector3.new(size*0.1, size*4, size*4), Transparency = 1}, Enum.EasingStyle.Sine)
-            Debris_HX:AddItem(p, life + 0.2)
-        end
-
-        EFFECTS["Star"] = function(cf, color, size, life)
-            local p = mkPart(cf, color, size)
-            for _, face in ipairs({Enum.NormalId.Front, Enum.NormalId.Back}) do
-                local d = Instance.new("Decal")
-                d.Texture = "rbxassetid://6023565776"
-                d.Face    = face
-                d.Color3  = color
-                d.Parent  = p
-            end
-            tw(p, life, {Size = Vector3.new(size*2.5, size*2.5, size*2.5), Transparency = 1})
-            Debris_HX:AddItem(p, life + 0.2)
-        end
-
-        EFFECTS["Heart"] = function(cf, color, size, life)
-            local p = mkPart(cf, color, size)
-            for _, face in ipairs({Enum.NormalId.Front, Enum.NormalId.Back}) do
-                local d = Instance.new("Decal")
-                d.Texture = "rbxassetid://6023565961"
-                d.Face    = face
-                d.Color3  = color
-                d.Parent  = p
-            end
-            tw(p, life, {CFrame = cf + Vector3.new(0, size*2, 0), Size = Vector3.new(size*2.5, size*2.5, size*2.5), Transparency = 1})
-            Debris_HX:AddItem(p, life + 0.2)
-        end
-
-        EFFECTS["Energy"] = function(cf, color, size, life)
-            for i = 1, 3 do
-                local p = mkPart(cf, color, size * (0.5 + i*0.3), 0.3)
-                p.Shape    = Enum.PartType.Ball
-                p.Material = Enum.Material.ForceField
-                tw(p, life * (1 + i*0.2), {Size = Vector3.new(size*3, size*3, size*3), Transparency = 1})
-                Debris_HX:AddItem(p, life * 2 + 0.2)
-            end
-        end
-
-        EFFECTS["Blood"] = function(cf, color, size, life)
-            for _ = 1, 8 do
-                local p = mkPart(cf, Color3.fromRGB(140, 10, 10), size * 0.2)
-                p.Shape     = Enum.PartType.Ball
-                p.Anchored  = false
-                p.AssemblyLinearVelocity = Vector3.new(math.random(-20,20), math.random(5,20), math.random(-20,20))
-                Debris_HX:AddItem(p, life + 0.3)
-            end
-        end
-
-        EFFECTS["Crit Text"] = function(cf, color, size, life)
-            local p = mkPart(cf, color, 0.1, 1)
-            local gui = Instance.new("BillboardGui")
-            gui.Size          = UDim2.new(0, 140, 0, 46)
-            gui.AlwaysOnTop   = true
-            gui.LightInfluence = 0
-            gui.Parent        = p
-            local label = Instance.new("TextLabel")
-            label.Size                 = UDim2.new(1,0,1,0)
-            label.BackgroundTransparency = 1
-            label.Text                 = "CRIT!"
-            label.TextColor3           = color
-            label.TextStrokeTransparency = 0
-            label.TextStrokeColor3     = Color3.new(0,0,0)
-            label.TextScaled           = true
-            label.Font                 = Enum.Font.GothamBlack
-            label.Parent               = gui
-            tw(p,     life, {CFrame = cf + Vector3.new(0, size*3, 0)})
-            tw(label, life, {TextTransparency = 1, TextStrokeTransparency = 1})
-            Debris_HX:AddItem(p, life + 0.2)
-        end
-
-        EFFECTS["Bubble"] = function(cf, color, size, life)
-            for _ = 1, 6 do
-                local p = mkPart(cf, color, size * (0.2 + math.random()*0.3), 0.5)
-                p.Shape    = Enum.PartType.Ball
-                p.Material = Enum.Material.Glass
-                tw(p, life, {CFrame = cf + Vector3.new(math.random(-20,20)/10, size*2, math.random(-20,20)/10), Transparency = 1})
-                Debris_HX:AddItem(p, life + 0.2)
-            end
-        end
-
-        EFFECTS["Meteor"] = function(cf, color, size, life)
-            local start = cf + Vector3.new(0, size*8, 0)
-            local p = mkPart(start, color, size); p.Shape = Enum.PartType.Ball
-            local fire = Instance.new("Fire")
-            fire.Heat     = size
-            fire.Size     = size * 2
-            fire.Color    = color
-            fire.Parent   = p
-            tw(p, life, {CFrame = cf, Transparency = 0.5}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-            Debris_HX:AddItem(p, life + 0.3)
-        end
-
-        EFFECTS["Rose"] = function(cf, color, size, life)
-            local p = mkPart(cf, color, size)
-            for _, face in ipairs({Enum.NormalId.Front, Enum.NormalId.Back}) do
-                local d = Instance.new("Decal")
-                d.Texture = "rbxassetid://6023565778"
-                d.Face    = face
-                d.Color3  = color
-                d.Parent  = p
-            end
-            tw(p, life, {CFrame = cf * CFrame.Angles(0, math.pi*2, 0), Size = Vector3.new(size*2, size*2, size*2), Transparency = 1})
-            Debris_HX:AddItem(p, life + 0.2)
-        end
-
-        EFFECTS["Void"] = function(cf, color, size, life)
-            local p = mkPart(cf, Color3.fromRGB(10, 0, 15), size*2, 0.2)
-            p.Shape    = Enum.PartType.Ball
-            p.Material = Enum.Material.Neon
-            tw(p, life, {Size = Vector3.new(0.1, 0.1, 0.1), Transparency = 1})
-            Debris_HX:AddItem(p, life + 0.2)
-        end
-
-        -- ------------------- PLAYBACK -------------------
-        local function playEffect(cf)
-            local fn = EFFECTS[hx.fx_name]
-            if not fn then return end
-            pcall(fn, cf, hx.fx_color, hx.fx_size, hx.fx_lifetime)
-        end
-
-        local function playSound(cf)
-            local id = HIT_SOUND_IDS[hx.snd_name]
-            if not id then return end
-            local p = mkPart(cf, Color3.new(1,1,1), 0.1, 1)
-            local s = Instance.new("Sound")
-            s.SoundId             = id
-            s.Volume              = hx.snd_volume
-            s.RollOffMode         = Enum.RollOffMode.Linear
-            s.RollOffMaxDistance  = 160
-            s.Parent              = p
-            s:Play()
-            s.Ended:Connect(function() if p.Parent then p:Destroy() end end)
-            Debris_HX:AddItem(p, 6)
-        end
-
-        -- ------------------- UI -------------------
-        local miscTab = _tabObjects[4]
-        if not miscTab then return end
-
-        local fxSec = UI.createSection(miscTab, "Hit Effects", "left")
-        UI.addToggle(fxSec, "Hit Effects Enabled", false, function(v) hx.fx_enabled = v end)
-        UI.addDropdown(fxSec, "Effect", HIT_EFFECTS_ORDER, "Ball", function(v) hx.fx_name = v end)
-        UI.addSlider(fxSec, "Size",     0.2, 10, 2, true, function(v) hx.fx_size = v end)
-        UI.addSlider(fxSec, "Lifetime", 0.1,  5, 1, true, function(v) hx.fx_lifetime = v end)
-        UI.addToggle(fxSec, "Only Enemies (FX)", true, function(v) hx.fx_team_check = v end)
-        UI.addColorPicker(fxSec, "Effect Color", hx.fx_color, function(c) hx.fx_color = c end)
-        UI.addButton(fxSec, "Test Effect", function()
-            local ch = client.Character
-            local root = ch and ch:FindFirstChild("HumanoidRootPart")
-            if root then playEffect(root.CFrame + root.CFrame.LookVector * 5) end
-        end)
-
-        local sndSec = UI.createSection(miscTab, "Hit Sounds", "right")
-        UI.addToggle(sndSec, "Hit Sounds Enabled", false, function(v) hx.snd_enabled = v end)
-        UI.addDropdown(sndSec, "Sound", HIT_SOUNDS_ORDER, "Bonk", function(v) hx.snd_name = v end)
-        UI.addSlider(sndSec, "Volume", 0, 5, 1, true, function(v) hx.snd_volume = v end)
-        UI.addToggle(sndSec, "Only Enemies (Sound)", true, function(v) hx.snd_team_check = v end)
-        UI.addButton(sndSec, "Test Sound", function()
-            local ch = client.Character
-            local root = ch and ch:FindFirstChild("HumanoidRootPart")
-            if root then playSound(root.CFrame) end
-        end)
-
-        -- ------------------- HIT DETECTION -------------------
-        local function isEnemy(plr)
-            if plr == client then return false end
-            if plr.Team and client.Team and plr.Team == client.Team then return false end
-            return true
-        end
-
-        local function bindCharacter(plr, char)
-            local hum = char:WaitForChild("Humanoid", 5)
-            if not hum then return end
-            local root = char:WaitForChild("HumanoidRootPart", 5)
-            if not root then return end
-            local last = hum.Health
-            hum:GetPropertyChangedSignal("Health"):Connect(function()
-                local newH = hum.Health
-                if newH < last - 0.05 and newH > 0 then
-                    local enemy = isEnemy(plr)
-                    if hx.fx_enabled and (not hx.fx_team_check or enemy) then
-                        pcall(playEffect, root.CFrame)
-                    end
-                    if hx.snd_enabled and (not hx.snd_team_check or enemy) then
-                        pcall(playSound, root.CFrame)
-                    end
-                end
-                last = newH
-            end)
-        end
-
-        local function bindPlayer(plr)
-            if plr.Character then task.spawn(bindCharacter, plr, plr.Character) end
-            plr.CharacterAdded:Connect(function(c) task.spawn(bindCharacter, plr, c) end)
-        end
-
-        for _, p in ipairs(Players:GetPlayers()) do bindPlayer(p) end
-        Players.PlayerAdded:Connect(bindPlayer)
-        print("[kamidere] addon: hit-effects+sounds section built")
-        end) -- pcall
-        if not __ok then warn("[kamidere] HIT EFFECTS/SOUNDS ERROR: " .. tostring(__err)) end
-    end)
 
     -- ============================================================
     -- [INFINITE DASH] - Rivals ItemLibrary cooldown clamp
@@ -492549,6 +492294,271 @@ end)
     end)
 
     -- ============================================================
+    -- [HIT EFFECTS + HIT SOUNDS] - explicit bind to UE's native Options
+    -- Scans getgenv().Toggles / getgenv().Options for every hit_effects_*
+    -- and hit_sounds_* key the VM registers at runtime, builds dedicated
+    -- sections wired through _activate so flipping anything reaches the
+    -- VM's own effect pipeline. If the VM registered nothing, nothing
+    -- shows up (we log what we found so you can see).
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: hit-effects+sounds bind starting")
+        task.wait(4) -- let the VM finish building its Options table
+
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
+
+        local T = getgenv().Toggles or {}
+        local O = getgenv().Options or {}
+
+        local function scan(prefix)
+            local toggles, options = {}, {}
+            for k, obj in pairs(T) do
+                if type(k) == "string" and type(obj) == "table" and k:sub(1, #prefix) == prefix then
+                    toggles[#toggles + 1] = k
+                end
+            end
+            for k, obj in pairs(O) do
+                if type(k) == "string" and type(obj) == "table" and k:sub(1, #prefix) == prefix then
+                    options[#options + 1] = k
+                end
+            end
+            table.sort(toggles); table.sort(options)
+            return toggles, options
+        end
+
+        local effT, effO = scan("hit_effects")
+        local sndT, sndO = scan("hit_sounds")
+
+        print(("[kamidere] UE hit_effects_* found: %d toggles, %d options"):format(#effT, #effO))
+        print(("[kamidere] UE hit_sounds_*  found: %d toggles, %d options"):format(#sndT, #sndO))
+
+        -- Dump each key + its shape so we can see exactly what UE registered.
+        local function dumpKey(scope, k, obj)
+            local vtype = typeof(obj.Value)
+            local vrepr = tostring(obj.Value)
+            local values = ""
+            if type(obj.Values) == "table" then
+                local n = 0; local samples = {}
+                for kk, _ in pairs(obj.Values) do
+                    n = n + 1
+                    if n <= 8 then samples[#samples + 1] = tostring(kk) end
+                end
+                values = (" Values[%d]: {%s%s}"):format(n, table.concat(samples, ", "), n > 8 and ", ..." or "")
+            end
+            print(("[kamidere] %s %s  type=%s val=%s%s"):format(scope, k, vtype, vrepr, values))
+        end
+        for _, k in ipairs(effT) do dumpKey("T", k, T[k]) end
+        for _, k in ipairs(effO) do dumpKey("O", k, O[k]) end
+        for _, k in ipairs(sndT) do dumpKey("T", k, T[k]) end
+        for _, k in ipairs(sndO) do dumpKey("O", k, O[k]) end
+
+        if #effT + #effO + #sndT + #sndO == 0 then
+            warn("[kamidere] UE registered no hit_effects_* / hit_sounds_* options this session")
+            return
+        end
+
+        local function labelOf(k)
+            local s = k:gsub("^hit_effects_?", ""):gsub("^hit_sounds_?", ""):gsub("_", " ")
+            s = s:gsub("(%l)(%u)", function(a, b) return a .. " " .. b end)
+            s = s:gsub("(%a)([%w]*)", function(a, b) return a:upper() .. b:lower() end)
+            return s ~= "" and s or k
+        end
+
+        local function toColor3(v)
+            if typeof(v) == "Color3" then return v end
+            if type(v) == "table" and v.R and v.G and v.B then
+                return Color3.new(tonumber(v.R) or 0, tonumber(v.G) or 0, tonumber(v.B) or 0)
+            end
+            return Color3.fromRGB(255, 255, 255)
+        end
+
+        local function renderInto(container, toggleKeys, optionKeys)
+            for _, k in ipairs(toggleKeys) do
+                local obj = T[k]
+                UI.addToggle(container, labelOf(k), obj.Value == true, function(v)
+                    _activate(k, "Toggles", v)
+                end)
+            end
+            -- group color_N inline
+            local colGroups, skip = {}, {}
+            for _, k in ipairs(optionKeys) do
+                local base, idx = k:lower():match("^(.-)col_?(%d+)$")
+                if base and idx then
+                    colGroups[base] = colGroups[base] or {}
+                    table.insert(colGroups[base], { key = k, idx = tonumber(idx) })
+                end
+            end
+            for base, members in pairs(colGroups) do
+                if #members >= 2 then
+                    table.sort(members, function(a, b) return a.idx < b.idx end)
+                    for i = 2, #members do skip[members[i].key] = true end
+                else
+                    colGroups[base] = nil
+                end
+            end
+            local emittedGroup = {}
+            for _, k in ipairs(optionKeys) do
+                if skip[k] then
+                    -- skip, already rendered as part of a group
+                elseif true then
+                    local obj = O[k]
+                    local base, idx = k:lower():match("^(.-)col_?(%d+)$")
+                    if base and idx and colGroups[base] and not emittedGroup[base] then
+                        emittedGroup[base] = true
+                        local entries = {}
+                        for _, m in ipairs(colGroups[base]) do
+                            local mo = O[m.key]
+                            if mo then
+                                local mk = m.key
+                                table.insert(entries, {
+                                    initial  = toColor3(mo.Value),
+                                    callback = function(c) _activate(mk, "Options", c) end,
+                                })
+                            end
+                        end
+                        UI.addColorGroup(container, "Colors", entries)
+                    elseif type(obj.Values) == "table" then
+                        -- Build list from Values table. Handles both array-shape
+                        -- (single-select: Values = {"A","B","C"}) and dict-shape
+                        -- (multi-select: Values = {A=false, B=true, ...}).
+                        local sv = {}
+                        local seen = {}
+                        for _, x in ipairs(obj.Values) do
+                            if type(x) == "string" and not seen[x] then
+                                sv[#sv + 1] = x; seen[x] = true
+                            end
+                        end
+                        for kk, _ in pairs(obj.Values) do
+                            if type(kk) == "string" and not seen[kk] then
+                                sv[#sv + 1] = kk; seen[kk] = true
+                            end
+                        end
+                        table.sort(sv)
+                        if #sv > 0 then
+                            local default = type(obj.Value) == "string" and obj.Value or sv[1]
+                            UI.addDropdown(container, labelOf(k), sv, default,
+                                function(v) _activate(k, "Options", v) end)
+                        end
+                    elseif typeof(obj.Value) == "Color3"
+                        or (type(obj.Value) == "table" and obj.Value.R and obj.Value.G and obj.Value.B)
+                    then
+                        UI.addColorPicker(container, labelOf(k), toColor3(obj.Value), function(c)
+                            _activate(k, "Options", c)
+                        end)
+                    elseif tonumber(obj.Min) or tonumber(obj.Max) or tonumber(obj.Value) then
+                        local mn = tonumber(obj.Min) or 0
+                        local mx = tonumber(obj.Max) or 100
+                        local cur = tonumber(obj.Value) or mn
+                        local fl = (mx - math.floor(mx)) > 0 or (mn - math.floor(mn)) > 0
+                        UI.addSlider(container, labelOf(k), mn, mx, cur, fl, function(v)
+                            _activate(k, "Options", v)
+                        end)
+                    end
+                end
+            end
+        end
+
+        -- --------------- PREVIEW HELPERS ---------------
+        local Debris_HX = game:GetService("Debris")
+
+        -- Known hit-sound name -> rbxassetid map. UE's dropdown Value is a
+        -- short lowercase name (minecraft/pop/rust/tf2/bonk/oof/...). We
+        -- try to resolve the name to an id so Preview plays locally even
+        -- when we have no direct read on the VM's internal sound table.
+        local KNOWN_HIT_SOUND_IDS = {
+            minecraft        = "rbxassetid://7384271040",
+            pop              = "rbxassetid://6895079853",
+            rust             = "rbxassetid://6541725837",
+            tf2              = "rbxassetid://611403141",
+            bonk             = "rbxassetid://6826617738",
+            oof              = "rbxassetid://5543191254",
+            anime            = "rbxassetid://5751043737",
+            ["anime punch"]  = "rbxassetid://5751043737",
+            skeet            = "rbxassetid://7093750382",
+            nebula           = "rbxassetid://7249033956",
+            ["vine boom"]    = "rbxassetid://5153947961",
+            ["metal pipe"]   = "rbxassetid://5478359253",
+            ding             = "rbxassetid://7302080645",
+            glass            = "rbxassetid://5174219111",
+            ["deep bass"]    = "rbxassetid://180083194",
+            hit              = "rbxassetid://5748925860",
+            tick             = "rbxassetid://12222124",
+            damage           = "rbxassetid://5748925860",
+            freeze           = "rbxassetid://5748926180",
+        }
+
+        local function previewSound()
+            local sel = O.hit_sounds_selected and O.hit_sounds_selected.Value
+            local vol = O.hit_sounds_volume   and tonumber(O.hit_sounds_volume.Value)   or 1
+            local id  = type(sel) == "string" and KNOWN_HIT_SOUND_IDS[sel:lower()] or nil
+            if not id then
+                warn(("[kamidere] no known asset id for hit sound '%s' - add it to KNOWN_HIT_SOUND_IDS"):format(tostring(sel)))
+                return
+            end
+            local char = client.Character
+            local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+            local cf   = hrp and hrp.CFrame or CFrame.new(0, 10, 0)
+            local p = Instance.new("Part")
+            p.Anchored = true; p.CanCollide = false; p.CanQuery = false; p.CanTouch = false
+            p.Transparency = 1; p.Size = Vector3.new(0.1, 0.1, 0.1); p.CFrame = cf
+            p.Parent = workspace
+            local s = Instance.new("Sound")
+            s.SoundId = id; s.Volume = vol; s.RollOffMaxDistance = 180
+            s.Parent = p
+            s:Play()
+            s.Ended:Connect(function() if p.Parent then p:Destroy() end end)
+            Debris_HX:AddItem(p, 6)
+        end
+
+        -- Preview Effect: pokes the VM's own hit pipeline by briefly
+        -- dropping the local character's health by a sliver, which many
+        -- cheat hit-effect bindings trigger off of. Falls back to a
+        -- generic visual pulse if the health hook doesn't fire anything.
+        local function previewEffect()
+            local char = client.Character
+            local hum  = char and char:FindFirstChildOfClass("Humanoid")
+            local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+            if hum and hum.Health > 2 then
+                local old = hum.Health
+                hum.Health = old - 1
+                task.delay(0.1, function()
+                    if hum and hum.Parent and hum.Health < old then hum.Health = old end
+                end)
+            end
+            if hrp then
+                local p = Instance.new("Part")
+                p.Anchored = true; p.CanCollide = false; p.CanQuery = false; p.CanTouch = false
+                p.Material = Enum.Material.Neon
+                p.Color = Color3.fromRGB(255, 220, 90)
+                p.Size = Vector3.new(0.5, 0.5, 0.5); p.Shape = Enum.PartType.Ball
+                p.CFrame = hrp.CFrame
+                p.Parent = workspace
+                TweenService:Create(p, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Size = Vector3.new(4, 4, 4), Transparency = 1,
+                }):Play()
+                Debris_HX:AddItem(p, 1)
+            end
+        end
+
+        if #effT + #effO > 0 then
+            local effSec = UI.createSection(miscTab, "Hit Effects", "left")
+            renderInto(effSec, effT, effO)
+            UI.addButton(effSec, "Preview Effect", previewEffect)
+        end
+        if #sndT + #sndO > 0 then
+            local sndSec = UI.createSection(miscTab, "Hit Sounds", "right")
+            renderInto(sndSec, sndT, sndO)
+            UI.addButton(sndSec, "Preview Sound", previewSound)
+        end
+
+        print("[kamidere] addon: hit-effects+sounds sections built")
+        end) -- pcall
+        if not __ok then warn("[kamidere] HIT bind ERROR: " .. tostring(__err)) end
+    end)
+
+    -- ============================================================
     -- [VIEW MODEL - Valorant Arms (Jett)]
     -- Loads an external Roblox asset by id, extracts MeshId +
     -- TextureID from the first MeshPart inside, and swaps those
@@ -492573,9 +492583,28 @@ end)
         end
         if not Cam then return end
 
+        -- Preset catalog: name -> Roblox catalog/UGC asset id.
+        -- Add more by appending to both ARM_PRESET_ORDER (display order in the
+        -- dropdown) and ARM_PRESETS (name -> id lookup).
+        local ARM_PRESET_ORDER = {
+            "Valorant Jett",
+            "Sasuke Uchiha (Naruto)",
+            "CJ (GTA 5)",
+            "Reyna Valorant (Glowing)",
+            "Oguri Cap (Uma Musume)",
+        }
+        local ARM_PRESETS = {
+            ["Valorant Jett"]            = "92761079223638",
+            ["Sasuke Uchiha (Naruto)"]   = "95817725061865",
+            ["CJ (GTA 5)"]               = "109916751215637",
+            ["Reyna Valorant (Glowing)"] = "116676530394480",
+            ["Oguri Cap (Uma Musume)"]   = "115676524869389",
+        }
+
         local vm = {
             enabled      = false,
-            asset_id     = "92761079223638",   -- Jett Valorant Outfit UGC
+            preset_name  = ARM_PRESET_ORDER[1],
+            asset_id     = ARM_PRESETS[ARM_PRESET_ORDER[1]],
             mesh_id      = "",                 -- direct MeshId override (optional)
             texture_id   = "",                 -- direct TextureID override (optional)
             skin_color   = Color3.fromRGB(246, 220, 200),
@@ -492716,40 +492745,21 @@ end)
         if not miscTab then return end
 
         local vmSec = UI.createSection(miscTab, "View Model", "right")
-        local vmToggle = UI.addToggle(vmSec, "Valorant Arms (Jett)", false, function(v)
+        local vmToggle = UI.addToggle(vmSec, "Custom Arms", false, function(v)
             vm.enabled = v
             if v then applyAndSweep() else restoreAll() end
         end)
-        UI.addTextBox(vmSec, "Asset ID (Model)", function(s)
-            vm.asset_id = (s or ""):gsub("%s", "")
+        UI.addDropdown(vmSec, "Arms Preset", ARM_PRESET_ORDER, vm.preset_name, function(selected)
+            vm.preset_name = selected
+            vm.asset_id    = ARM_PRESETS[selected] or vm.asset_id
+            -- Clear the resolved cache so applyAndSweep re-fetches the new asset
+            vm.resolved.mesh = nil
+            vm.resolved.tex  = nil
             if vm.enabled then applyAndSweep() end
         end)
-        UI.addTextBox(vmSec, "Mesh ID Override", function(s)
-            vm.mesh_id = (s or ""):gsub("%s", "")
-            if vm.enabled then applyAndSweep() end
-        end)
-        UI.addTextBox(vmSec, "Texture ID Override", function(s)
-            vm.texture_id = (s or ""):gsub("%s", "")
-            if vm.enabled then applyAndSweep() end
-        end)
-        UI.addColorPicker(vmSec, "Forearm Skin", vm.skin_color, function(c)
-            vm.skin_color = c
-            if vm.enabled then
-                for part in pairs(vm.saved) do
-                    if classify(part.Name) == "skin" then
-                        pcall(function() part.Color = c end)
-                    end
-                end
-            end
-        end)
-        UI.addButton(vmSec, "Apply / Rescan", function()
-            if vm.enabled then applyAndSweep() end
-        end)
-        UI.addButton(vmSec, "Restore Arms", function()
-            restoreAll()
-            vm.enabled = false
-            if vmToggle and vmToggle.setState then vmToggle.setState(false) end
-        end)
+        -- All other controls (Mesh/Texture overrides, Forearm Skin, Apply/Rescan,
+        -- Restore Arms) hidden by operator request. The toggle + preset dropdown
+        -- are the only visible controls; everything else uses baked-in defaults.
 
         -- ---- hooks: weapon switch + camera reswap + 3Hz re-sweep ----
         Cam.DescendantAdded:Connect(function(d)
