@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-05.r7"
+    local KAMI_BUILD = "2026-11-05.r8"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -490961,37 +490961,44 @@ function UI.addTextBox(container, placeholderText, callback)
     return box
 end
 
-function UI.addColorPicker(container, labelText, defaultColor, callback)
+function UI.addColorPicker(container, labelText, defaultColor, callback, preBuiltSwatch)
     local color = defaultColor or Color3.fromRGB(255, 255, 255)
     local hue, sat, val = Color3.toHSV(color)
     local alpha = 1
 
-    -- row + swatch (inline in the section)
-    local row = Instance.new("Frame")
-    row.Name = "ColorPicker_" .. labelText
-    row.Size = UDim2.new(1, 0, 0, 26)
-    row.BackgroundTransparency = 1
-    row.Parent = container
+    local swatch
+    if preBuiltSwatch then
+        -- Caller already laid out the swatch; just mount the popup onto it.
+        swatch = preBuiltSwatch
+        swatch.BackgroundColor3 = color
+    else
+        -- row + swatch (inline in the section)
+        local row = Instance.new("Frame")
+        row.Name = "ColorPicker_" .. labelText
+        row.Size = UDim2.new(1, 0, 0, 26)
+        row.BackgroundTransparency = 1
+        row.Parent = container
 
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -52, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Text = labelText
-    if UI_FONT then pcall(function() label.FontFace = UI_FONT end) end
-    label.TextSize = 11
-    label.TextColor3 = COLORS.TextPrimary
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = row
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, -52, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = labelText
+        if UI_FONT then pcall(function() label.FontFace = UI_FONT end) end
+        label.TextSize = 11
+        label.TextColor3 = COLORS.TextPrimary
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = row
 
-    local swatch = Instance.new("TextButton")
-    swatch.Size = UDim2.new(0, 42, 0, 16)
-    swatch.Position = UDim2.new(1, -44, 0.5, -8)
-    swatch.BackgroundColor3 = color
-    swatch.Text = ""
-    swatch.AutoButtonColor = false
-    swatch.Parent = row
-    local swatchCorner = Instance.new("UICorner"); swatchCorner.CornerRadius = UDim.new(0, 3); swatchCorner.Parent = swatch
-    local swatchStroke = Instance.new("UIStroke"); swatchStroke.Color = COLORS.PanelBorder; swatchStroke.Thickness = 1; swatchStroke.Parent = swatch
+        swatch = Instance.new("TextButton")
+        swatch.Size = UDim2.new(0, 42, 0, 16)
+        swatch.Position = UDim2.new(1, -44, 0.5, -8)
+        swatch.BackgroundColor3 = color
+        swatch.Text = ""
+        swatch.AutoButtonColor = false
+        swatch.Parent = row
+        local swatchCorner = Instance.new("UICorner"); swatchCorner.CornerRadius = UDim.new(0, 3); swatchCorner.Parent = swatch
+        local swatchStroke = Instance.new("UIStroke"); swatchStroke.Color = COLORS.PanelBorder; swatchStroke.Thickness = 1; swatchStroke.Parent = swatch
+    end
 
     -- -------- POPUP --------
     local popup = Instance.new("Frame")
@@ -491293,6 +491300,49 @@ function UI.addColorPicker(container, labelText, defaultColor, callback)
         getAlpha = function() return alpha end,
         Instance = swatch,
     }
+end
+
+-- Render N color pickers on a single row with one shared label and
+-- N compact swatches side-by-side. Each swatch opens its own picker
+-- popup via UI.addColorPicker with pre-built swatches.
+-- entries: array of { initial = Color3, callback = function(c, alpha) }
+function UI.addColorGroup(container, labelText, entries)
+    local n = #entries
+    local sw, sp = 20, 4 -- swatch width + spacing
+    local totalW = n * sw + (n - 1) * sp
+
+    local row = Instance.new("Frame")
+    row.Name = "ColorGroup_" .. labelText
+    row.Size = UDim2.new(1, 0, 0, 26)
+    row.BackgroundTransparency = 1
+    row.Parent = container
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -(totalW + 8), 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = labelText
+    if UI_FONT then pcall(function() label.FontFace = UI_FONT end) end
+    label.TextSize = 11
+    label.TextColor3 = COLORS.TextPrimary
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = row
+
+    local handles = {}
+    for i = 1, n do
+        local entry = entries[i]
+        local swatch = Instance.new("TextButton")
+        swatch.Size = UDim2.new(0, sw, 0, 14)
+        local rightOffset = (n - i) * (sw + sp) + 4
+        swatch.Position = UDim2.new(1, -rightOffset - sw, 0.5, -7)
+        swatch.Text = ""
+        swatch.AutoButtonColor = false
+        swatch.Parent = row
+        local sc = Instance.new("UICorner"); sc.CornerRadius = UDim.new(0, 2); sc.Parent = swatch
+        local ss = Instance.new("UIStroke"); ss.Color = COLORS.PanelBorder; ss.Thickness = 1; ss.Parent = swatch
+
+        handles[i] = UI.addColorPicker(nil, labelText .. " " .. i, entry.initial, entry.callback, swatch)
+    end
+    return handles
 end
 
 local FONT_APPLIED = {}
@@ -491852,22 +491902,74 @@ end)
                     local obj=_O[k]; if not obj then continue end
                     UI.addKeybind(container, lbl(k), _resolveKey(obj), function(key) _activate(k,"Options",key) end)
                 end
+                -- Pre-scan for color_N groups (e.g. color_1..color_4, color1..color3)
+                -- so stacked color pickers get rendered as a single tight row.
+                local _colorGroups, _skipKey = {}, {}
+                do
+                    local tmp = {}
+                    for _, k in ipairs(b.o) do
+                        local base, idx = k:lower():match("^(.-)color_?(%d+)$")
+                        if base and idx then
+                            tmp[base] = tmp[base] or {}
+                            table.insert(tmp[base], { key = k, idx = tonumber(idx) })
+                        end
+                    end
+                    for base, members in pairs(tmp) do
+                        if #members >= 2 then
+                            table.sort(members, function(a, bb) return a.idx < bb.idx end)
+                            _colorGroups[members[1].key] = members
+                            for i = 2, #members do _skipKey[members[i].key] = true end
+                        end
+                    end
+                end
+
+                local function _toColor3(v)
+                    if typeof(v) == "Color3" then return v end
+                    if type(v) == "table" and v.R and v.G and v.B then
+                        return Color3.new(tonumber(v.R) or 0, tonumber(v.G) or 0, tonumber(v.B) or 0)
+                    end
+                    return Color3.fromRGB(255, 255, 255)
+                end
+
                 for _,k in ipairs(b.o) do
+                    if _skipKey[k] then continue end
                     local obj=_O[k]; if not obj then continue end
-                    local isColor = (typeof(obj.Value)=="Color3")
+                    local group = _colorGroups[k]
+                    if group then
+                        -- Build the group label: strip the trailing 'Color N' from
+                        -- the first member's label and replace with 'Colors'.
+                        local base = lbl(k):gsub("[Cc]olor%s*%d+%s*$", ""):gsub("%s+$", "")
+                        local groupLabel = (base ~= "" and (base .. " Colors") or "Colors")
+                        local entries = {}
+                        for _, m in ipairs(group) do
+                            local gobj = _O[m.key]
+                            if gobj then
+                                local mk = m.key
+                                table.insert(entries, {
+                                    initial  = _toColor3(gobj.Value),
+                                    callback = function(c) _activate(mk, "Options", c) end,
+                                })
+                            end
+                        end
+                        if #entries > 0 then
+                            local _grs = UI.addColorGroup(container, groupLabel, entries)
+                            if _grs then
+                                for i, m in ipairs(group) do
+                                    local h = _grs[i]
+                                    if h and h.setColor then
+                                        local mk = m.key
+                                        _uiRefs[mk] = function(v) if typeof(v)=="Color3" then h.setColor(v) end end
+                                    end
+                                end
+                            end
+                        end
+                    elseif (typeof(obj.Value)=="Color3")
                         or (obj.Type=="ColorPicker")
                         or (type(obj.Value)=="table" and obj.Value.R and obj.Value.G and obj.Value.B)
                         or (k:lower():find("_col") ~= nil)
                         or (k:lower():find("color") ~= nil and type(obj.Value)~="string" and type(obj.Values)~="table")
-                    if isColor then
-                        local initial = obj.Value
-                        if typeof(initial) ~= "Color3" then
-                            if type(initial)=="table" and initial.R and initial.G and initial.B then
-                                initial = Color3.new(tonumber(initial.R) or 0, tonumber(initial.G) or 0, tonumber(initial.B) or 0)
-                            else
-                                initial = Color3.fromRGB(255, 255, 255)
-                            end
-                        end
+                    then
+                        local initial = _toColor3(obj.Value)
                         local _cr=UI.addColorPicker(container,lbl(k),initial,function(c) _activate(k,"Options",c) end)
                         if _cr and _cr.setColor then _uiRefs[k]=function(v) if typeof(v)=="Color3" then _cr.setColor(v) end end end
                     elseif type(obj.Values)=="table" and #obj.Values>0 then
