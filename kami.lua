@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-05.r13"
+    local KAMI_BUILD = "2026-11-05.r14"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -492460,13 +492460,97 @@ end)
             end
         end
 
+        -- --------------- PREVIEW HELPERS ---------------
+        local Debris_HX = game:GetService("Debris")
+
+        -- Known hit-sound name -> rbxassetid map. UE's dropdown Value is a
+        -- short lowercase name (minecraft/pop/rust/tf2/bonk/oof/...). We
+        -- try to resolve the name to an id so Preview plays locally even
+        -- when we have no direct read on the VM's internal sound table.
+        local KNOWN_HIT_SOUND_IDS = {
+            minecraft        = "rbxassetid://7384271040",
+            pop              = "rbxassetid://6895079853",
+            rust             = "rbxassetid://6541725837",
+            tf2              = "rbxassetid://611403141",
+            bonk             = "rbxassetid://6826617738",
+            oof              = "rbxassetid://5543191254",
+            anime            = "rbxassetid://5751043737",
+            ["anime punch"]  = "rbxassetid://5751043737",
+            skeet            = "rbxassetid://7093750382",
+            nebula           = "rbxassetid://7249033956",
+            ["vine boom"]    = "rbxassetid://5153947961",
+            ["metal pipe"]   = "rbxassetid://5478359253",
+            ding             = "rbxassetid://7302080645",
+            glass            = "rbxassetid://5174219111",
+            ["deep bass"]    = "rbxassetid://180083194",
+            hit              = "rbxassetid://5748925860",
+            tick             = "rbxassetid://12222124",
+            damage           = "rbxassetid://5748925860",
+            freeze           = "rbxassetid://5748926180",
+        }
+
+        local function previewSound()
+            local sel = O.hit_sounds_selected and O.hit_sounds_selected.Value
+            local vol = O.hit_sounds_volume   and tonumber(O.hit_sounds_volume.Value)   or 1
+            local id  = type(sel) == "string" and KNOWN_HIT_SOUND_IDS[sel:lower()] or nil
+            if not id then
+                warn(("[kamidere] no known asset id for hit sound '%s' - add it to KNOWN_HIT_SOUND_IDS"):format(tostring(sel)))
+                return
+            end
+            local char = client.Character
+            local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+            local cf   = hrp and hrp.CFrame or CFrame.new(0, 10, 0)
+            local p = Instance.new("Part")
+            p.Anchored = true; p.CanCollide = false; p.CanQuery = false; p.CanTouch = false
+            p.Transparency = 1; p.Size = Vector3.new(0.1, 0.1, 0.1); p.CFrame = cf
+            p.Parent = workspace
+            local s = Instance.new("Sound")
+            s.SoundId = id; s.Volume = vol; s.RollOffMaxDistance = 180
+            s.Parent = p
+            s:Play()
+            s.Ended:Connect(function() if p.Parent then p:Destroy() end end)
+            Debris_HX:AddItem(p, 6)
+        end
+
+        -- Preview Effect: pokes the VM's own hit pipeline by briefly
+        -- dropping the local character's health by a sliver, which many
+        -- cheat hit-effect bindings trigger off of. Falls back to a
+        -- generic visual pulse if the health hook doesn't fire anything.
+        local function previewEffect()
+            local char = client.Character
+            local hum  = char and char:FindFirstChildOfClass("Humanoid")
+            local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+            if hum and hum.Health > 2 then
+                local old = hum.Health
+                hum.Health = old - 1
+                task.delay(0.1, function()
+                    if hum and hum.Parent and hum.Health < old then hum.Health = old end
+                end)
+            end
+            if hrp then
+                local p = Instance.new("Part")
+                p.Anchored = true; p.CanCollide = false; p.CanQuery = false; p.CanTouch = false
+                p.Material = Enum.Material.Neon
+                p.Color = Color3.fromRGB(255, 220, 90)
+                p.Size = Vector3.new(0.5, 0.5, 0.5); p.Shape = Enum.PartType.Ball
+                p.CFrame = hrp.CFrame
+                p.Parent = workspace
+                TweenService:Create(p, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Size = Vector3.new(4, 4, 4), Transparency = 1,
+                }):Play()
+                Debris_HX:AddItem(p, 1)
+            end
+        end
+
         if #effT + #effO > 0 then
             local effSec = UI.createSection(miscTab, "Hit Effects", "left")
             renderInto(effSec, effT, effO)
+            UI.addButton(effSec, "Preview Effect", previewEffect)
         end
         if #sndT + #sndO > 0 then
             local sndSec = UI.createSection(miscTab, "Hit Sounds", "right")
             renderInto(sndSec, sndT, sndO)
+            UI.addButton(sndSec, "Preview Sound", previewSound)
         end
 
         print("[kamidere] addon: hit-effects+sounds sections built")
