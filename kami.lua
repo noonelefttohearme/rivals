@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-05.r10"
+    local KAMI_BUILD = "2026-11-05.r11"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -492318,9 +492318,28 @@ end)
         end
         if not Cam then return end
 
+        -- Preset catalog: name -> Roblox catalog/UGC asset id.
+        -- Add more by appending to both ARM_PRESET_ORDER (display order in the
+        -- dropdown) and ARM_PRESETS (name -> id lookup).
+        local ARM_PRESET_ORDER = {
+            "Valorant Jett",
+            "Sasuke Uchiha (Naruto)",
+            "CJ (GTA 5)",
+            "Reyna Valorant (Glowing)",
+            "Oguri Cap (Uma Musume)",
+        }
+        local ARM_PRESETS = {
+            ["Valorant Jett"]            = "92761079223638",
+            ["Sasuke Uchiha (Naruto)"]   = "95817725061865",
+            ["CJ (GTA 5)"]               = "109916751215637",
+            ["Reyna Valorant (Glowing)"] = "116676530394480",
+            ["Oguri Cap (Uma Musume)"]   = "115676524869389",
+        }
+
         local vm = {
             enabled      = false,
-            asset_id     = "92761079223638",   -- Jett Valorant Outfit UGC
+            preset_name  = ARM_PRESET_ORDER[1],
+            asset_id     = ARM_PRESETS[ARM_PRESET_ORDER[1]],
             mesh_id      = "",                 -- direct MeshId override (optional)
             texture_id   = "",                 -- direct TextureID override (optional)
             skin_color   = Color3.fromRGB(246, 220, 200),
@@ -492461,15 +492480,21 @@ end)
         if not miscTab then return end
 
         local vmSec = UI.createSection(miscTab, "View Model", "right")
-        local vmToggle = UI.addToggle(vmSec, "Valorant Arms (Jett)", false, function(v)
+        local vmToggle = UI.addToggle(vmSec, "Custom Arms", false, function(v)
             vm.enabled = v
             if v then applyAndSweep() else restoreAll() end
         end)
-        -- Everything else (Asset ID, Mesh/Texture overrides, Forearm Skin,
-        -- Apply/Rescan, Restore Arms) is hidden by request. The toggle uses
-        -- the baked-in defaults on vm.asset_id / vm.skin_color etc, and
-        -- flipping the toggle off still fully restores because the saved-part
-        -- snapshot and restoreAll() both live in the closure above.
+        UI.addDropdown(vmSec, "Arms Preset", ARM_PRESET_ORDER, vm.preset_name, function(selected)
+            vm.preset_name = selected
+            vm.asset_id    = ARM_PRESETS[selected] or vm.asset_id
+            -- Clear the resolved cache so applyAndSweep re-fetches the new asset
+            vm.resolved.mesh = nil
+            vm.resolved.tex  = nil
+            if vm.enabled then applyAndSweep() end
+        end)
+        -- All other controls (Mesh/Texture overrides, Forearm Skin, Apply/Rescan,
+        -- Restore Arms) hidden by operator request. The toggle + preset dropdown
+        -- are the only visible controls; everything else uses baked-in defaults.
 
         -- ---- hooks: weapon switch + camera reswap + 3Hz re-sweep ----
         Cam.DescendantAdded:Connect(function(d)
