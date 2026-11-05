@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-05.r4"
+    local KAMI_BUILD = "2026-11-05.r5"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -489429,9 +489429,12 @@ local __kami_result = runApplication()
             for _, child in ipairs(root:GetChildren()) do
                 if child:IsA("ScreenGui") then
                     local nm = child.Name
-                    if nm ~= "KamidereUI" and nm ~= "KamiderePopup" then
-                        if nm == "Linoria" or nm:find("[Ll]inoria") or nm:find("[Mm]odal") or nm == "LinoriaLib" or nm == "ScreenGui" then
-                            -- only disable, don't destroy — VM may re-bind it
+                    if nm ~= "KamidereUI" and nm ~= "KamiderePopup" and nm ~= "KamidereCursor" then
+                        -- Narrow match only: known Linoria names + obvious modal popups.
+                        -- Do NOT match bare "ScreenGui" - that eats kami's own
+                        -- cursor GUI and any other game-owned ScreenGui without
+                        -- a custom Name set.
+                        if nm == "Linoria" or nm == "LinoriaLib" or nm:find("[Ll]inoria") or nm == "Modal" then
                             pcall(function() child.Enabled = false end)
                         end
                     end
@@ -491591,6 +491594,7 @@ end)
     local _curArrow, _curShadow
     pcall(function()
         local _curGui = Instance.new("ScreenGui")
+        _curGui.Name = "KamidereCursor"
         _curGui.DisplayOrder = 99999; _curGui.IgnoreGuiInset = true
         _curGui.ResetOnSpawn = false; _curGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
         local _cgOk, _cg = pcall(function() return game:GetService("CoreGui") end)
