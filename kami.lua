@@ -491512,6 +491512,392 @@ end)
         end)
     end)
 
+    -- ============================================================
+    -- [HIT EFFECTS + HIT SOUNDS] - plaintext, operator-editable
+    -- Edit HIT_EFFECTS_ORDER / HIT_SOUNDS_ORDER / HIT_SOUND_IDS /
+    -- EFFECTS[...] below to add, rename, or swap entries.
+    -- ============================================================
+    task.spawn(function()
+        task.wait(3) -- let the auto-populate pass finish first
+
+        local TweenService_HX  = game:GetService("TweenService")
+        local Debris_HX        = game:GetService("Debris")
+
+        -- ------------------- CATALOGS (edit freely) -------------------
+        local HIT_EFFECTS_ORDER = {
+            "Ball", "Diamond", "Explosion", "Fire", "Smoke",
+            "Confetti", "Sparkles", "Shockwave", "Lightning", "Pop",
+            "Ring", "Star", "Heart", "Energy", "Blood",
+            "Crit Text", "Bubble", "Meteor", "Rose", "Void",
+        }
+
+        local HIT_SOUNDS_ORDER = {
+            "Bonk", "Oof", "Minecraft", "Rust", "Pop",
+            "Anime Punch", "Skeet", "Nebula", "Vine Boom", "Metal Pipe",
+            "Discord Ping", "Bruh", "Fortnite Death", "Osu Hit", "Kirby",
+            "Hyperhit", "Tf2 Hit", "Deep Bass", "Glass", "Ding",
+        }
+
+        local HIT_SOUND_IDS = {
+            ["Bonk"]            = "rbxassetid://6826617738",
+            ["Oof"]             = "rbxassetid://5543191254",
+            ["Minecraft"]       = "rbxassetid://7384271040",
+            ["Rust"]            = "rbxassetid://6541725837",
+            ["Pop"]             = "rbxassetid://6895079853",
+            ["Anime Punch"]     = "rbxassetid://5751043737",
+            ["Skeet"]           = "rbxassetid://7093750382",
+            ["Nebula"]          = "rbxassetid://7249033956",
+            ["Vine Boom"]       = "rbxassetid://5153947961",
+            ["Metal Pipe"]      = "rbxassetid://5478359253",
+            ["Discord Ping"]    = "rbxassetid://5162226106",
+            ["Bruh"]            = "rbxassetid://4624277062",
+            ["Fortnite Death"]  = "rbxassetid://5478360068",
+            ["Osu Hit"]         = "rbxassetid://5215929020",
+            ["Kirby"]           = "rbxassetid://6563101997",
+            ["Hyperhit"]        = "rbxassetid://9068897577",
+            ["Tf2 Hit"]         = "rbxassetid://611403141",
+            ["Deep Bass"]       = "rbxassetid://180083194",
+            ["Glass"]           = "rbxassetid://5174219111",
+            ["Ding"]            = "rbxassetid://7302080645",
+        }
+
+        -- ------------------- STATE -------------------
+        local hx = {
+            fx_enabled     = false,
+            fx_name        = "Ball",
+            fx_color       = Color3.fromRGB(215, 180, 65),
+            fx_size        = 2.0,
+            fx_lifetime    = 1.0,
+            fx_team_check  = true,
+            snd_enabled    = false,
+            snd_name       = "Bonk",
+            snd_volume     = 1.0,
+            snd_team_check = true,
+        }
+
+        -- ------------------- HELPERS -------------------
+        local function mkPart(cf, color, size, trans)
+            local p = Instance.new("Part")
+            p.Anchored     = true
+            p.CanCollide   = false
+            p.CanQuery     = false
+            p.CanTouch     = false
+            p.CastShadow   = false
+            p.Material     = Enum.Material.Neon
+            p.Color        = color
+            p.Transparency = trans or 0
+            p.Size         = typeof(size) == "Vector3" and size or Vector3.new(size, size, size)
+            p.CFrame       = cf
+            p.Parent       = workspace
+            return p
+        end
+
+        local function tw(obj, time, goal, style, dir)
+            local ti = TweenInfo.new(time, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out)
+            TweenService_HX:Create(obj, ti, goal):Play()
+        end
+
+        -- ------------------- EFFECT BUILDERS -------------------
+        local EFFECTS = {}
+
+        EFFECTS["Ball"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, size); p.Shape = Enum.PartType.Ball
+            tw(p, life, {Size = Vector3.new(size*2.4, size*2.4, size*2.4), Transparency = 1})
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Diamond"] = function(cf, color, size, life)
+            local p = mkPart(cf * CFrame.Angles(0, math.pi/4, 0), color, Vector3.new(size, size*1.6, size))
+            tw(p, life, {Size = Vector3.new(size*2, size*3, size*2), Transparency = 1, CFrame = p.CFrame * CFrame.Angles(0, math.pi, 0)})
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Explosion"] = function(cf, color, size, life)
+            local e = Instance.new("Explosion")
+            e.Position       = cf.Position
+            e.BlastRadius    = size * 2
+            e.BlastPressure  = 0
+            e.DestroyJointRadiusPercent = 0
+            e.ExplosionType  = Enum.ExplosionType.NoCraters
+            e.Visible        = true
+            e.Parent         = workspace
+            Debris_HX:AddItem(e, life + 0.2)
+        end
+
+        EFFECTS["Fire"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, 0.1, 1)
+            local fire = Instance.new("Fire")
+            fire.Heat            = size
+            fire.Size            = size * 2
+            fire.Color           = color
+            fire.SecondaryColor  = color
+            fire.Parent          = p
+            task.delay(life, function() if fire.Parent then fire.Enabled = false end end)
+            Debris_HX:AddItem(p, life + 2)
+        end
+
+        EFFECTS["Smoke"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, 0.1, 1)
+            local s = Instance.new("Smoke")
+            s.Color        = color
+            s.Size         = size
+            s.Opacity      = 0.6
+            s.RiseVelocity = size * 2
+            s.Parent       = p
+            task.delay(life, function() if s.Parent then s.Enabled = false end end)
+            Debris_HX:AddItem(p, life + 2)
+        end
+
+        EFFECTS["Confetti"] = function(cf, color, size, life)
+            for _ = 1, 15 do
+                local c = Color3.fromHSV(math.random(), 0.85, 1)
+                local p = mkPart(cf, c, size * 0.2)
+                p.Anchored  = false
+                p.AssemblyLinearVelocity = Vector3.new(math.random(-15,15), math.random(10,25), math.random(-15,15))
+                Debris_HX:AddItem(p, life + 0.3)
+            end
+        end
+
+        EFFECTS["Sparkles"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, 0.1, 1)
+            local sp = Instance.new("Sparkles")
+            sp.SparkleColor = color
+            sp.Parent       = p
+            task.delay(life, function() if sp.Parent then sp.Enabled = false end end)
+            Debris_HX:AddItem(p, life + 2)
+        end
+
+        EFFECTS["Shockwave"] = function(cf, color, size, life)
+            local p = mkPart(cf * CFrame.Angles(0, 0, math.pi/2), color, Vector3.new(size*0.2, size*0.4, size*0.4))
+            p.Shape = Enum.PartType.Cylinder
+            tw(p, life, {Size = Vector3.new(size*0.2, size*6, size*6), Transparency = 1})
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Lightning"] = function(cf, color, size, life)
+            local last = cf.Position + Vector3.new(0, size*4, 0)
+            for i = 1, 6 do
+                local nxt = cf.Position + Vector3.new(math.random(-20,20)/10, size*(4 - i*0.7), math.random(-20,20)/10)
+                local mid = (last + nxt) * 0.5
+                local dist = (nxt - last).Magnitude
+                local p = mkPart(CFrame.lookAt(mid, nxt), color, Vector3.new(size*0.1, size*0.1, dist))
+                tw(p, life, {Transparency = 1})
+                Debris_HX:AddItem(p, life + 0.2)
+                last = nxt
+            end
+        end
+
+        EFFECTS["Pop"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, size*0.5); p.Shape = Enum.PartType.Ball
+            tw(p, life*0.6, {Size = Vector3.new(size*1.6, size*1.6, size*1.6), Transparency = 1}, Enum.EasingStyle.Back)
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Ring"] = function(cf, color, size, life)
+            local p = mkPart(cf * CFrame.Angles(0, 0, math.pi/2), color, Vector3.new(size*0.1, size, size))
+            p.Shape = Enum.PartType.Cylinder
+            tw(p, life, {Size = Vector3.new(size*0.1, size*4, size*4), Transparency = 1}, Enum.EasingStyle.Sine)
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Star"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, size)
+            for _, face in ipairs({Enum.NormalId.Front, Enum.NormalId.Back}) do
+                local d = Instance.new("Decal")
+                d.Texture = "rbxassetid://6023565776"
+                d.Face    = face
+                d.Color3  = color
+                d.Parent  = p
+            end
+            tw(p, life, {Size = Vector3.new(size*2.5, size*2.5, size*2.5), Transparency = 1})
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Heart"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, size)
+            for _, face in ipairs({Enum.NormalId.Front, Enum.NormalId.Back}) do
+                local d = Instance.new("Decal")
+                d.Texture = "rbxassetid://6023565961"
+                d.Face    = face
+                d.Color3  = color
+                d.Parent  = p
+            end
+            tw(p, life, {CFrame = cf + Vector3.new(0, size*2, 0), Size = Vector3.new(size*2.5, size*2.5, size*2.5), Transparency = 1})
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Energy"] = function(cf, color, size, life)
+            for i = 1, 3 do
+                local p = mkPart(cf, color, size * (0.5 + i*0.3), 0.3)
+                p.Shape    = Enum.PartType.Ball
+                p.Material = Enum.Material.ForceField
+                tw(p, life * (1 + i*0.2), {Size = Vector3.new(size*3, size*3, size*3), Transparency = 1})
+                Debris_HX:AddItem(p, life * 2 + 0.2)
+            end
+        end
+
+        EFFECTS["Blood"] = function(cf, color, size, life)
+            for _ = 1, 8 do
+                local p = mkPart(cf, Color3.fromRGB(140, 10, 10), size * 0.2)
+                p.Shape     = Enum.PartType.Ball
+                p.Anchored  = false
+                p.AssemblyLinearVelocity = Vector3.new(math.random(-20,20), math.random(5,20), math.random(-20,20))
+                Debris_HX:AddItem(p, life + 0.3)
+            end
+        end
+
+        EFFECTS["Crit Text"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, 0.1, 1)
+            local gui = Instance.new("BillboardGui")
+            gui.Size          = UDim2.new(0, 140, 0, 46)
+            gui.AlwaysOnTop   = true
+            gui.LightInfluence = 0
+            gui.Parent        = p
+            local label = Instance.new("TextLabel")
+            label.Size                 = UDim2.new(1,0,1,0)
+            label.BackgroundTransparency = 1
+            label.Text                 = "CRIT!"
+            label.TextColor3           = color
+            label.TextStrokeTransparency = 0
+            label.TextStrokeColor3     = Color3.new(0,0,0)
+            label.TextScaled           = true
+            label.Font                 = Enum.Font.GothamBlack
+            label.Parent               = gui
+            tw(p,     life, {CFrame = cf + Vector3.new(0, size*3, 0)})
+            tw(label, life, {TextTransparency = 1, TextStrokeTransparency = 1})
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Bubble"] = function(cf, color, size, life)
+            for _ = 1, 6 do
+                local p = mkPart(cf, color, size * (0.2 + math.random()*0.3), 0.5)
+                p.Shape    = Enum.PartType.Ball
+                p.Material = Enum.Material.Glass
+                tw(p, life, {CFrame = cf + Vector3.new(math.random(-20,20)/10, size*2, math.random(-20,20)/10), Transparency = 1})
+                Debris_HX:AddItem(p, life + 0.2)
+            end
+        end
+
+        EFFECTS["Meteor"] = function(cf, color, size, life)
+            local start = cf + Vector3.new(0, size*8, 0)
+            local p = mkPart(start, color, size); p.Shape = Enum.PartType.Ball
+            local fire = Instance.new("Fire")
+            fire.Heat     = size
+            fire.Size     = size * 2
+            fire.Color    = color
+            fire.Parent   = p
+            tw(p, life, {CFrame = cf, Transparency = 0.5}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+            Debris_HX:AddItem(p, life + 0.3)
+        end
+
+        EFFECTS["Rose"] = function(cf, color, size, life)
+            local p = mkPart(cf, color, size)
+            for _, face in ipairs({Enum.NormalId.Front, Enum.NormalId.Back}) do
+                local d = Instance.new("Decal")
+                d.Texture = "rbxassetid://6023565778"
+                d.Face    = face
+                d.Color3  = color
+                d.Parent  = p
+            end
+            tw(p, life, {CFrame = cf * CFrame.Angles(0, math.pi*2, 0), Size = Vector3.new(size*2, size*2, size*2), Transparency = 1})
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        EFFECTS["Void"] = function(cf, color, size, life)
+            local p = mkPart(cf, Color3.fromRGB(10, 0, 15), size*2, 0.2)
+            p.Shape    = Enum.PartType.Ball
+            p.Material = Enum.Material.Neon
+            tw(p, life, {Size = Vector3.new(0.1, 0.1, 0.1), Transparency = 1})
+            Debris_HX:AddItem(p, life + 0.2)
+        end
+
+        -- ------------------- PLAYBACK -------------------
+        local function playEffect(cf)
+            local fn = EFFECTS[hx.fx_name]
+            if not fn then return end
+            pcall(fn, cf, hx.fx_color, hx.fx_size, hx.fx_lifetime)
+        end
+
+        local function playSound(cf)
+            local id = HIT_SOUND_IDS[hx.snd_name]
+            if not id then return end
+            local p = mkPart(cf, Color3.new(1,1,1), 0.1, 1)
+            local s = Instance.new("Sound")
+            s.SoundId             = id
+            s.Volume              = hx.snd_volume
+            s.RollOffMode         = Enum.RollOffMode.Linear
+            s.RollOffMaxDistance  = 160
+            s.Parent              = p
+            s:Play()
+            s.Ended:Connect(function() if p.Parent then p:Destroy() end end)
+            Debris_HX:AddItem(p, 6)
+        end
+
+        -- ------------------- UI -------------------
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
+
+        local fxSec = UI.createSection(miscTab, "Hit Effects", "left")
+        UI.addToggle(fxSec, "Hit Effects Enabled", false, function(v) hx.fx_enabled = v end)
+        UI.addDropdown(fxSec, "Effect", HIT_EFFECTS_ORDER, "Ball", function(v) hx.fx_name = v end)
+        UI.addSlider(fxSec, "Size",     0.2, 10, 2, true, function(v) hx.fx_size = v end)
+        UI.addSlider(fxSec, "Lifetime", 0.1,  5, 1, true, function(v) hx.fx_lifetime = v end)
+        UI.addToggle(fxSec, "Only Enemies (FX)", true, function(v) hx.fx_team_check = v end)
+        UI.addColorPicker(fxSec, "Effect Color", hx.fx_color, function(c) hx.fx_color = c end)
+        UI.addButton(fxSec, "Test Effect", function()
+            local ch = client.Character
+            local root = ch and ch:FindFirstChild("HumanoidRootPart")
+            if root then playEffect(root.CFrame + root.CFrame.LookVector * 5) end
+        end)
+
+        local sndSec = UI.createSection(miscTab, "Hit Sounds", "right")
+        UI.addToggle(sndSec, "Hit Sounds Enabled", false, function(v) hx.snd_enabled = v end)
+        UI.addDropdown(sndSec, "Sound", HIT_SOUNDS_ORDER, "Bonk", function(v) hx.snd_name = v end)
+        UI.addSlider(sndSec, "Volume", 0, 5, 1, true, function(v) hx.snd_volume = v end)
+        UI.addToggle(sndSec, "Only Enemies (Sound)", true, function(v) hx.snd_team_check = v end)
+        UI.addButton(sndSec, "Test Sound", function()
+            local ch = client.Character
+            local root = ch and ch:FindFirstChild("HumanoidRootPart")
+            if root then playSound(root.CFrame) end
+        end)
+
+        -- ------------------- HIT DETECTION -------------------
+        local function isEnemy(plr)
+            if plr == client then return false end
+            if plr.Team and client.Team and plr.Team == client.Team then return false end
+            return true
+        end
+
+        local function bindCharacter(plr, char)
+            local hum = char:WaitForChild("Humanoid", 5)
+            if not hum then return end
+            local root = char:WaitForChild("HumanoidRootPart", 5)
+            if not root then return end
+            local last = hum.Health
+            hum:GetPropertyChangedSignal("Health"):Connect(function()
+                local newH = hum.Health
+                if newH < last - 0.05 and newH > 0 then
+                    local enemy = isEnemy(plr)
+                    if hx.fx_enabled and (not hx.fx_team_check or enemy) then
+                        pcall(playEffect, root.CFrame)
+                    end
+                    if hx.snd_enabled and (not hx.snd_team_check or enemy) then
+                        pcall(playSound, root.CFrame)
+                    end
+                end
+                last = newH
+            end)
+        end
+
+        local function bindPlayer(plr)
+            if plr.Character then task.spawn(bindCharacter, plr, plr.Character) end
+            plr.CharacterAdded:Connect(function(c) task.spawn(bindCharacter, plr, c) end)
+        end
+
+        for _, p in ipairs(Players:GetPlayers()) do bindPlayer(p) end
+        Players.PlayerAdded:Connect(bindPlayer)
+    end)
+
     -- Remove the stats/info HUD created by the VM bytecode.
     -- We identify it by requiring BOTH an exact "health" label AND an exact
     -- "damage ratio" label as siblings under the same Frame — this combo is
