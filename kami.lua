@@ -491736,9 +491736,12 @@ end)
                 end
             end
 
+            -- Prefixes whose entire category should be hidden from the UI.
+            local _HIDE_PREFIX = {damage=true, damagenumber=true, damagenumbers=true, dmg=true}
+
             local _claimed = {}
             for _,g in ipairs(_tabGroups) do for _,p in ipairs(g.prefixes) do _claimed[p]=true end end
-            for prefix in pairs(_buckets) do if not _claimed[prefix] then table.insert(_tabGroups[4].prefixes, prefix) end end
+            for prefix in pairs(_buckets) do if not _claimed[prefix] and not _HIDE_PREFIX[prefix] then table.insert(_tabGroups[4].prefixes, prefix) end end
 
             local function _addSec(container, bucket)
                 local b=_buckets[bucket]; if not b then return end
@@ -491770,6 +491773,9 @@ end)
                     if type(obj.Values)=="table" and #obj.Values>0 then
                         local sv={}; for _,x in ipairs(obj.Values) do if type(x)=="string" then sv[#sv+1]=x end end
                         if #sv>0 then local _dr=UI.addDropdown(container,lbl(k),sv,type(obj.Value)=="string" and obj.Value or sv[1],function(v) _activate(k,"Options",v) end); if _dr then _uiRefs[k]=function(v) _dr.setValue(v) end end end
+                    elseif typeof(obj.Value)=="Color3" then
+                        local _cr=UI.addColorPicker(container,lbl(k),obj.Value,function(c) _activate(k,"Options",c) end)
+                        if _cr and _cr.setColor then _uiRefs[k]=function(v) if typeof(v)=="Color3" then _cr.setColor(v) end end end
                     elseif tonumber(obj.Min) or tonumber(obj.Max) or tonumber(obj.Value) then
                         local mn=tonumber(obj.Min) or 0; local mx=tonumber(obj.Max) or 100; local cur=tonumber(obj.Value) or mn
                         local fl=(mx-math.floor(mx))>0 or (mn-math.floor(mn))>0
@@ -491782,6 +491788,7 @@ end)
             for i=1,4 do
                 local g=_tabGroups[i]; local tabObj=_tabObjects[i]
                 for _,prefix in ipairs(g.prefixes) do
+                    if _HIDE_PREFIX[prefix] then continue end
                     local b=_buckets[prefix]
                     if b and (#b.t>0 or #b.o>0 or #b.kb>0) then
                         local sec=UI.createSection(tabObj, _prefixDisp[prefix] or prefix:sub(1,1):upper()..prefix:sub(2))
