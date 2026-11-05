@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-05.r12"
+    local KAMI_BUILD = "2026-11-05.r13"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -492334,6 +492334,26 @@ end)
         print(("[kamidere] UE hit_effects_* found: %d toggles, %d options"):format(#effT, #effO))
         print(("[kamidere] UE hit_sounds_*  found: %d toggles, %d options"):format(#sndT, #sndO))
 
+        -- Dump each key + its shape so we can see exactly what UE registered.
+        local function dumpKey(scope, k, obj)
+            local vtype = typeof(obj.Value)
+            local vrepr = tostring(obj.Value)
+            local values = ""
+            if type(obj.Values) == "table" then
+                local n = 0; local samples = {}
+                for kk, _ in pairs(obj.Values) do
+                    n = n + 1
+                    if n <= 8 then samples[#samples + 1] = tostring(kk) end
+                end
+                values = (" Values[%d]: {%s%s}"):format(n, table.concat(samples, ", "), n > 8 and ", ..." or "")
+            end
+            print(("[kamidere] %s %s  type=%s val=%s%s"):format(scope, k, vtype, vrepr, values))
+        end
+        for _, k in ipairs(effT) do dumpKey("T", k, T[k]) end
+        for _, k in ipairs(effO) do dumpKey("O", k, O[k]) end
+        for _, k in ipairs(sndT) do dumpKey("T", k, T[k]) end
+        for _, k in ipairs(sndO) do dumpKey("O", k, O[k]) end
+
         if #effT + #effO + #sndT + #sndO == 0 then
             warn("[kamidere] UE registered no hit_effects_* / hit_sounds_* options this session")
             return
@@ -492399,12 +492419,26 @@ end)
                             end
                         end
                         UI.addColorGroup(container, "Colors", entries)
-                    elseif type(obj.Values) == "table" and #obj.Values > 0 then
+                    elseif type(obj.Values) == "table" then
+                        -- Build list from Values table. Handles both array-shape
+                        -- (single-select: Values = {"A","B","C"}) and dict-shape
+                        -- (multi-select: Values = {A=false, B=true, ...}).
                         local sv = {}
-                        for _, x in ipairs(obj.Values) do if type(x) == "string" then sv[#sv + 1] = x end end
+                        local seen = {}
+                        for _, x in ipairs(obj.Values) do
+                            if type(x) == "string" and not seen[x] then
+                                sv[#sv + 1] = x; seen[x] = true
+                            end
+                        end
+                        for kk, _ in pairs(obj.Values) do
+                            if type(kk) == "string" and not seen[kk] then
+                                sv[#sv + 1] = kk; seen[kk] = true
+                            end
+                        end
+                        table.sort(sv)
                         if #sv > 0 then
-                            UI.addDropdown(container, labelOf(k), sv,
-                                type(obj.Value) == "string" and obj.Value or sv[1],
+                            local default = type(obj.Value) == "string" and obj.Value or sv[1]
+                            UI.addDropdown(container, labelOf(k), sv, default,
                                 function(v) _activate(k, "Options", v) end)
                         end
                     elseif typeof(obj.Value) == "Color3"
