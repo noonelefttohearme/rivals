@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-05.r8"
+    local KAMI_BUILD = "2026-11-05.r9"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -492855,36 +492855,11 @@ end)
             vm.enabled = v
             if v then applyAndSweep() else restoreAll() end
         end)
-        UI.addTextBox(vmSec, "Asset ID (Model)", function(s)
-            vm.asset_id = (s or ""):gsub("%s", "")
-            if vm.enabled then applyAndSweep() end
-        end)
-        UI.addTextBox(vmSec, "Mesh ID Override", function(s)
-            vm.mesh_id = (s or ""):gsub("%s", "")
-            if vm.enabled then applyAndSweep() end
-        end)
-        UI.addTextBox(vmSec, "Texture ID Override", function(s)
-            vm.texture_id = (s or ""):gsub("%s", "")
-            if vm.enabled then applyAndSweep() end
-        end)
-        UI.addColorPicker(vmSec, "Forearm Skin", vm.skin_color, function(c)
-            vm.skin_color = c
-            if vm.enabled then
-                for part in pairs(vm.saved) do
-                    if classify(part.Name) == "skin" then
-                        pcall(function() part.Color = c end)
-                    end
-                end
-            end
-        end)
-        UI.addButton(vmSec, "Apply / Rescan", function()
-            if vm.enabled then applyAndSweep() end
-        end)
-        UI.addButton(vmSec, "Restore Arms", function()
-            restoreAll()
-            vm.enabled = false
-            if vmToggle and vmToggle.setState then vmToggle.setState(false) end
-        end)
+        -- Everything else (Asset ID, Mesh/Texture overrides, Forearm Skin,
+        -- Apply/Rescan, Restore Arms) is hidden by request. The toggle uses
+        -- the baked-in defaults on vm.asset_id / vm.skin_color etc, and
+        -- flipping the toggle off still fully restores because the saved-part
+        -- snapshot and restoreAll() both live in the closure above.
 
         -- ---- hooks: weapon switch + camera reswap + 3Hz re-sweep ----
         Cam.DescendantAdded:Connect(function(d)
