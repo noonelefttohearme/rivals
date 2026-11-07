@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-07.r26"
+    local KAMI_BUILD = "2026-11-07.r27"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -493285,7 +493285,7 @@ end)
         sp.spoof_level_enabled     = false
         sp.spoof_level_value       = 999
         sp.spoof_rank_enabled      = false
-        sp.spoof_rank_value        = "Nebula"
+        sp.spoof_rank_value        = "Archnemesis"
 
         -- Walks PlayerGui for TextLabels whose Name/Text matches known
         -- patterns and overwrites. Client-side only; other players still
@@ -493305,9 +493305,27 @@ end)
                 text_re = ".+",
             },
         }
+        -- Real Rivals ladder (23 ranks). ELO thresholds kept as data in
+        -- case we need them later for auto-rank-text that matches a
+        -- spoofed ELO value.
         local RANK_OPTIONS = {
-            "Bronze", "Silver", "Gold", "Platinum", "Diamond",
-            "Master", "Grandmaster", "Nebula", "Celestial", "Mythic",
+            "Bronze I", "Bronze II", "Bronze III",
+            "Silver I", "Silver II", "Silver III",
+            "Gold I", "Gold II", "Gold III",
+            "Platinum I", "Platinum II", "Platinum III",
+            "Diamond I", "Diamond II", "Diamond III",
+            "Onyx I", "Onyx II", "Onyx III",
+            "Nemesis",
+            "Archnemesis",
+        }
+        local RANK_ELO = {
+            ["Bronze I"]=0, ["Bronze II"]=200, ["Bronze III"]=400,
+            ["Silver I"]=600, ["Silver II"]=800, ["Silver III"]=1000,
+            ["Gold I"]=1200, ["Gold II"]=1400, ["Gold III"]=1600,
+            ["Platinum I"]=1800, ["Platinum II"]=2000, ["Platinum III"]=2200,
+            ["Diamond I"]=2400, ["Diamond II"]=2600, ["Diamond III"]=2800,
+            ["Onyx I"]=3000, ["Onyx II"]=3200, ["Onyx III"]=3400,
+            ["Nemesis"]=3600, ["Archnemesis"]=9999,
         }
 
         local function nameMatches(nm, pattern)
@@ -493342,7 +493360,7 @@ end)
         UI.addToggle(spoofSec, "Spoof Level", false, function(v) sp.spoof_level_enabled = v end)
         UI.addSlider(spoofSec, "Level Value", 0, 9999, 999, false, function(v) sp.spoof_level_value = v end)
         UI.addToggle(spoofSec, "Spoof Rank", false, function(v) sp.spoof_rank_enabled = v end)
-        UI.addDropdown(spoofSec, "Rank Value", RANK_OPTIONS, "Nebula", function(v) sp.spoof_rank_value = v end)
+        UI.addDropdown(spoofSec, "Rank Value", RANK_OPTIONS, "Archnemesis", function(v) sp.spoof_rank_value = v end)
 
         task.spawn(function()
             while playerGui.Parent do
