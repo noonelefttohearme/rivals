@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-07.r24"
+    local KAMI_BUILD = "2026-11-07.r25"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -493223,15 +493223,76 @@ end)
 
         -- ============== Rage Sahur ==============
         local sahurSec = UI.createSection(miscTab, "Rage Sahur / Utility", "right")
+        -- Known candidate Sahur / Italian brainrot audio IDs. Tried in order;
+        -- first one that successfully loads wins.
+        local SAHUR_CANDIDATES = {
+            "rbxassetid://114789716732411",  -- Tung Tung Tung Sahur loop
+            "rbxassetid://116533812541091",  -- Tung Tung Tung full
+            "rbxassetid://106749691816456",  -- Tralalero Tralala
+            "rbxassetid://129784036568948",  -- original attempt
+            "rbxassetid://137564319893257",  -- phonk sahur remix
+        }
+        local sahurSvc = game:GetService("SoundService")
         local sahur = Instance.new("Sound")
-        sahur.SoundId = "rbxassetid://129784036568948" -- tralalero tralala / sahur mod
-        sahur.Looped = true; sahur.Volume = 1.0; sahur.Parent = workspace
+        sahur.Name = "KamiSahur"
+        sahur.Looped = true
+        sahur.Volume = 1.0
+        sahur.Parent = sahurSvc  -- global 2D audio - plays regardless of listener position
+        sahur.SoundId = SAHUR_CANDIDATES[1]
+
+        -- Try each candidate: wait briefly for load, if failed try the next.
+        local function trySahur(idx, onDone)
+            idx = idx or 1
+            if idx > #SAHUR_CANDIDATES then
+                warn("[kamidere] Rage Sahur: no candidate loaded")
+                if onDone then onDone(false) end
+                return
+            end
+            local id = SAHUR_CANDIDATES[idx]
+            sahur.SoundId = id
+            print("[kamidere] Rage Sahur: trying " .. id)
+            task.spawn(function()
+                task.wait(0.5)
+                if sahur.IsLoaded then
+                    print("[kamidere] Rage Sahur: loaded " .. id)
+                    if onDone then onDone(true) end
+                else
+                    print("[kamidere] Rage Sahur: dead " .. id)
+                    trySahur(idx + 1, onDone)
+                end
+            end)
+        end
+
+        -- Resolve a working id in the background so Play is instant later.
+        trySahur()
+
         UI.addToggle(sahurSec, "Rage Sahur Music", false, function(v)
             sp.rage_sahur_enabled = v
-            if v then sahur:Play() else sahur:Stop() end
+            if v then
+                pcall(function() sahur:Play() end)
+                print(("[kamidere] Rage Sahur: PLAY (id=%s vol=%.2f loaded=%s)"):format(
+                    sahur.SoundId, sahur.Volume, tostring(sahur.IsLoaded)))
+            else
+                pcall(function() sahur:Stop() end)
+            end
         end)
-        UI.addSlider(sahurSec, "Sahur Volume", 0, 5, 1, true, function(v)
-            sahur.Volume = v
+        UI.addSlider(sahurSec, "Sahur Volume", 0, 5, 1, true, function(v) sahur.Volume = v end)
+        UI.addTextBox(sahurSec, "Sahur Asset ID (override)", function(s)
+            local id = (s or ""):gsub("%D", "")
+            if id ~= "" then
+                sahur.SoundId = "rbxassetid://" .. id
+                print("[kamidere] Rage Sahur: override id=" .. sahur.SoundId)
+                if sp.rage_sahur_enabled then
+                    pcall(function() sahur:Stop(); sahur:Play() end)
+                end
+            end
+        end)
+        UI.addButton(sahurSec, "Retry Candidate List", function()
+            trySahur(1, function(ok)
+                if ok and sp.rage_sahur_enabled then
+                    pcall(function() sahur:Play() end)
+                end
+            end)
         end)
 
         -- ============== Unload Cheat ==============
