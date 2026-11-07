@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-07.r27"
+    local KAMI_BUILD = "2026-11-07.r28"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -492355,7 +492355,7 @@ end)
             ["Metal Pipe"]     = "rbxassetid://5478359253",
             ["Discord Ping"]   = "rbxassetid://5162226106",
             ["Bruh"]           = "rbxassetid://4624277062",
-            ["Fortnite Death"] = "rbxassetid://5478360068",
+            ["Fortnite Death"] = "rbxassetid://9064782034",   -- replaced dead 5478360068 (wrong asset type)
             ["Osu Hit"]        = "rbxassetid://5215929020",
             ["Kirby"]          = "rbxassetid://6563101997",
             ["Hyperhit"]       = "rbxassetid://9068897577",
@@ -492551,32 +492551,48 @@ end)
         -- Play as GLOBAL 2D audio parented to SoundService so it's not
         -- subject to 3D RollOff, part-spawn timing, or workspace sandbox
         -- rules in some executors. Logs if the SoundId refuses to load
-        -- so we can see which asset ids are dead.
+        -- Dead-sound memo + rate limit so one bad asset id can never spam
+        -- the console. If a SoundId fails to load once, it's marked dead
+        -- and skipped forever (operator can override via the textbox).
         local SoundService_HX = game:GetService("SoundService")
+        local DEAD_SOUNDS = {}   -- SoundId -> true
+        local lastPlayTick = 0
         local function playSound(_cf)
+            -- Rate-limit: at most one play attempt per 150ms, period.
+            local now = tick()
+            if now - lastPlayTick < 0.15 then return end
+            lastPlayTick = now
+
             local id = SOUND_IDS[hx.snd_name]
             if not id then
                 warn("[kamidere] no asset id for sound: " .. tostring(hx.snd_name))
+                return
+            end
+            if DEAD_SOUNDS[id] then
+                -- Silent skip; we already warned once about this id.
                 return
             end
             local s = Instance.new("Sound")
             s.SoundId = id
             s.Volume  = hx.snd_volume
             s.Parent  = SoundService_HX
-            print(("[kamidere] playSound '%s' id=%s vol=%.2f"):format(hx.snd_name, id, hx.snd_volume))
-            -- Fire-and-forget + self-clean; don't wait on load, roblox
-            -- buffers short audio. If asset is dead, Sound.Loaded fails
-            -- and we log once below.
-            s.Played:Connect(function() print("[kamidere] sound Played fired") end)
             s:Play()
+            -- If it fails to load within 1s, mark dead so we don't retry.
             task.spawn(function()
-                task.wait(0.4)
+                task.wait(1.0)
                 if s.Parent and not s.IsLoaded then
-                    warn("[kamidere] sound did not load within 0.4s: " .. id)
+                    DEAD_SOUNDS[id] = true
+                    warn(("[kamidere] sound DEAD, blacklisted: %s (%s)"):format(id, hx.snd_name))
+                    pcall(function() s:Destroy() end)
                 end
             end)
             s.Ended:Connect(function() if s.Parent then s:Destroy() end end)
             Debris_HX:AddItem(s, 10)
+        end
+        -- Expose a helper so the Custom Sound ID override can revive a
+        -- blacklisted slot (operator sets a fresh id and it's tried again).
+        getgenv()._kami_ReviveSound = function(id)
+            DEAD_SOUNDS[id] = nil
         end
 
         -- ------------- UI -------------
@@ -492606,8 +492622,11 @@ end)
         UI.addTextBox(sndSec, "Custom Sound ID (override)", function(s)
             local id = (s or ""):gsub("%D", "")
             if id ~= "" then
-                SOUND_IDS[hx.snd_name] = "rbxassetid://" .. id
-                print(("[kamidere] sound '%s' override -> rbxassetid://%s"):format(hx.snd_name, id))
+                local newUrl = "rbxassetid://" .. id
+                SOUND_IDS[hx.snd_name] = newUrl
+                -- Un-blacklist so it gets tried again
+                getgenv()._kami_ReviveSound(newUrl)
+                print(("[kamidere] sound '%s' override -> %s"):format(hx.snd_name, newUrl))
             end
         end)
 
@@ -493335,6 +493354,32 @@ end)
             return false
         end
 
+        -- Known Rivals rank badge image asset ids, lowest to highest.
+        -- Reserved for operator to pin real IDs once he gives them to me;
+        -- for now these are placeholders that let the structure work.
+        local RANK_BADGE_IDS = {
+            ["Bronze I"]       = "rbxassetid://17421651617",
+            ["Bronze II"]      = "rbxassetid://17421651617",
+            ["Bronze III"]     = "rbxassetid://17421651617",
+            ["Silver I"]       = "rbxassetid://17421654420",
+            ["Silver II"]      = "rbxassetid://17421654420",
+            ["Silver III"]     = "rbxassetid://17421654420",
+            ["Gold I"]         = "rbxassetid://17421657058",
+            ["Gold II"]        = "rbxassetid://17421657058",
+            ["Gold III"]       = "rbxassetid://17421657058",
+            ["Platinum I"]     = "rbxassetid://17421659801",
+            ["Platinum II"]    = "rbxassetid://17421659801",
+            ["Platinum III"]   = "rbxassetid://17421659801",
+            ["Diamond I"]      = "rbxassetid://17421662374",
+            ["Diamond II"]     = "rbxassetid://17421662374",
+            ["Diamond III"]    = "rbxassetid://17421662374",
+            ["Onyx I"]         = "rbxassetid://17421664993",
+            ["Onyx II"]        = "rbxassetid://17421664993",
+            ["Onyx III"]       = "rbxassetid://17421664993",
+            ["Nemesis"]        = "rbxassetid://17421667556",
+            ["Archnemesis"]    = "rbxassetid://17421670089",
+        }
+
         local function applySpoofs()
             if not (sp.spoof_winstreak_enabled or sp.spoof_level_enabled or sp.spoof_rank_enabled) then return end
             for _, gui in ipairs(playerGui:GetChildren()) do
@@ -493348,6 +493393,14 @@ end)
                                 pcall(function() d.Text = "Lv. " .. tostring(sp.spoof_level_value) end)
                             elseif sp.spoof_rank_enabled and nameMatches(n, SPOOF_PATTERNS.rank.name_re) then
                                 pcall(function() d.Text = tostring(sp.spoof_rank_value) end)
+                            end
+                        elseif d:IsA("ImageLabel") then
+                            if sp.spoof_rank_enabled then
+                                local n = d.Name:lower()
+                                if n:find("rank") or n:find("badge") or n:find("crest") then
+                                    local bid = RANK_BADGE_IDS[sp.spoof_rank_value]
+                                    if bid then pcall(function() d.Image = bid end) end
+                                end
                             end
                         end
                     end
