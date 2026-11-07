@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-07.r23"
+    local KAMI_BUILD = "2026-11-07.r24"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -493735,21 +493735,21 @@ end)
     end)
 
     -- ============================================================
-    -- [VIEW MODEL - Valorant Arms (Jett)]
-    -- Loads an external Roblox asset by id, extracts MeshId +
-    -- TextureID from the first MeshPart inside, and swaps those
-    -- onto the equipped viewmodel's arm MeshParts.
-    --
-    -- Default asset id is the public Jett Valorant Outfit UGC
-    -- (92761079223638). If that reads wrong on the arms, paste a
-    -- different asset id (full Model or raw MeshPart) in the Asset
-    -- ID box and press Apply. Raw Mesh ID + Texture ID overrides
-    -- are honored first when present.
+    -- [VIEW MODEL - Custom Arms (overlay)]
+    -- Instead of trying to MeshId-swap rivals' viewmodel arm parts
+    -- (which are protected and reject writes), this loads the outfit
+    -- asset as its own Model, clones it, parents it under the camera,
+    -- welds it to the Camera CFrame at arm position, and hides the
+    -- original viewmodel arms via LocalTransparencyModifier. The
+    -- overlay follows the camera every RenderStepped.
     -- ============================================================
     task.spawn(function()
         local __ok, __err = pcall(function()
-        print("[kamidere] addon: viewmodel starting")
-        task.wait(2)
+        print("[kamidere] addon: viewmodel (overlay) starting")
+        task.wait(3)
+
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
 
         local Cam = workspace.CurrentCamera
         if not Cam then
@@ -493759,9 +493759,6 @@ end)
         end
         if not Cam then return end
 
-        -- Preset catalog: name -> Roblox catalog/UGC asset id.
-        -- Add more by appending to both ARM_PRESET_ORDER (display order in the
-        -- dropdown) and ARM_PRESETS (name -> id lookup).
         local ARM_PRESET_ORDER = {
             "Valorant Jett",
             "Sasuke Uchiha (Naruto)",
@@ -493779,251 +493776,208 @@ end)
 
         local vm = {
             enabled      = false,
-            preset_name  = ARM_PRESET_ORDER[1],
-            asset_id     = ARM_PRESETS[ARM_PRESET_ORDER[1]],
-            mesh_id      = "",                 -- direct MeshId override (optional)
-            texture_id   = "",                 -- direct TextureID override (optional)
-            skin_color   = Color3.fromRGB(246, 220, 200),
-            saved        = {}, -- part -> { MeshId, TextureID, Color, Material }
-            resolved     = { mesh = nil, tex = nil }, -- cache after Apply
+            preset       = ARM_PRESET_ORDER[1],
+            overlay      = nil,  -- the active Model instance
+            hidden_parts = {},   -- part -> original LocalTransparencyModifier
+            scale        = 1.0,
+            offset_fwd   = 2.0,
+            offset_down  = -0.8,
         }
 
-        local function classify(name)
-            local n = string.lower(name or "")
-            if n:find("forearm") or n:find("skin") then return "skin" end
-            if n:find("glove") or n:find("sleeve") or n:find("gauntlet") or n:find("wrist") then return "gauntlet" end
-            if n:find("hand") then return "gauntlet" end
-            if n:find("arm") then return "gauntlet" end
-            return nil
-        end
-
-        local function isArmPart(inst)
-            if not inst:IsA("BasePart") then return false end
-            local p = inst
-            for _ = 1, 6 do
-                if not p or p == workspace then return false end
-                if p == Cam then return true end
-                p = p.Parent
-            end
-            return false
-        end
-
-        -- ---- asset resolver: pull first MeshPart's MeshId + TextureID ----
-        local function resolveAsset()
-            -- direct overrides win
-            local mid = (vm.mesh_id    ~= "" and vm.mesh_id)    or nil
-            local tid = (vm.texture_id ~= "" and vm.texture_id) or nil
-            if mid then
-                if not mid:find("://") then mid = "rbxassetid://" .. mid:gsub("%D", "") end
-                if tid and not tid:find("://") then tid = "rbxassetid://" .. tid:gsub("%D", "") end
-                vm.resolved.mesh = mid
-                vm.resolved.tex  = tid or ""
-                return true
-            end
-            -- otherwise load the asset id and walk for a MeshPart.
-            -- Try game:GetObjects first (works for public assets in most
-            -- executors), then InsertService:LoadAsset fallback.
-            local id = (vm.asset_id or ""):gsub("%D", "")
-            if id == "" then return false end
+        -- Load an asset by id; returns a Model/Instance or nil.
+        local function loadAsset(id)
+            id = (tostring(id) or ""):gsub("%D", "")
+            if id == "" then return nil end
             local url = "rbxassetid://" .. id
-            local inst
-            local ok, err = pcall(function()
+            print("[kami/vm] loading " .. url)
+            local obj
+            pcall(function()
                 if game.GetObjects then
                     local objs = game:GetObjects(url)
-                    if objs and objs[1] then inst = objs[1]; return end
-                end
-                local okIS, is = pcall(function() return game:GetService("InsertService") end)
-                if okIS and is and is.LoadAsset then
-                    local okLoad, model = pcall(function() return is:LoadAsset(tonumber(id)) end)
-                    if okLoad and model then inst = model; return end
+                    if objs and objs[1] then obj = objs[1]; return end
                 end
             end)
-            if not inst then
-                warn("[kami/viewmodel] failed to load asset " .. url .. " (" .. tostring(err) .. ")")
-                return false
-            end
-            print("[kami/viewmodel] loaded asset " .. url .. " -> " .. inst.ClassName .. " '" .. inst.Name .. "'")
-            local picked
-            if inst:IsA("MeshPart") and inst.MeshId ~= "" then
-                picked = inst
-            else
-                for _, d in ipairs(inst:GetDescendants()) do
-                    if d:IsA("MeshPart") and d.MeshId ~= "" then picked = d; break end
-                end
-                if not picked then
-                    -- SpecialMesh (legacy) fallback
-                    for _, d in ipairs(inst:GetDescendants()) do
-                        if d:IsA("SpecialMesh") and d.MeshId ~= "" then
-                            vm.resolved.mesh = d.MeshId
-                            vm.resolved.tex  = d.TextureId or ""
-                            print("[kami/viewmodel] using SpecialMesh: " .. d.MeshId)
-                            pcall(function() inst:Destroy() end)
-                            return true
-                        end
+            if not obj then
+                pcall(function()
+                    local is = game:GetService("InsertService")
+                    if is and is.LoadAsset then
+                        obj = is:LoadAsset(tonumber(id))
                     end
-                end
-            end
-            if not picked then
-                pcall(function() inst:Destroy() end)
-                warn("[kami/viewmodel] no MeshPart/SpecialMesh found in asset " .. url)
-                return false
-            end
-            vm.resolved.mesh = picked.MeshId
-            vm.resolved.tex  = picked.TextureID
-            print("[kami/viewmodel] resolved mesh=" .. vm.resolved.mesh .. " tex=" .. (vm.resolved.tex or ""))
-            pcall(function() inst:Destroy() end)
-            return true
-        end
-
-        -- ---- swap one part ----
-        local function swap(part, kind)
-            if vm.saved[part] then return end
-            vm.saved[part] = {
-                MeshId    = part:IsA("MeshPart") and part.MeshId or nil,
-                TextureID = part:IsA("MeshPart") and part.TextureID or nil,
-                Color     = part.Color,
-                Material  = part.Material,
-            }
-            pcall(function()
-                if kind == "skin" then
-                    part.Color    = vm.skin_color
-                    part.Material = Enum.Material.Plastic
-                    if part:IsA("MeshPart") then part.TextureID = "" end
-                    return
-                end
-                if part:IsA("MeshPart") then
-                    -- Try resolved mesh first; if missing, blast the raw asset
-                    -- URL into MeshId and let roblox auto-resolve (often works
-                    -- for UGC catalog ids when the asset is a wearable mesh).
-                    local mesh = vm.resolved.mesh
-                    local tex  = vm.resolved.tex
-                    if not mesh or mesh == "" then
-                        local id = (vm.asset_id or ""):gsub("%D", "")
-                        if id ~= "" then mesh = "rbxassetid://" .. id end
-                    end
-                    if mesh and mesh ~= "" then
-                        local okMesh = pcall(function() part.MeshId = mesh end)
-                        local okTex  = pcall(function() part.TextureID = tex or "" end)
-                        part.Color = Color3.new(1, 1, 1)
-                        if not okMesh then
-                            print(("[kami/viewmodel] MeshId swap REJECTED on %s (part protected?)"):format(part:GetFullName()))
-                        end
-                    end
-                end
-            end)
-        end
-
-        local function restorePart(part)
-            local s = vm.saved[part]
-            if not s then return end
-            vm.saved[part] = nil
-            pcall(function()
-                if part:IsA("MeshPart") then
-                    if s.MeshId    ~= nil then part.MeshId    = s.MeshId end
-                    if s.TextureID ~= nil then part.TextureID = s.TextureID end
-                end
-                part.Color    = s.Color
-                part.Material = s.Material
-            end)
-        end
-
-        local function restoreAll()
-            for part in pairs(vm.saved) do restorePart(part) end
-            vm.saved = {}
-        end
-
-        local function sweep()
-            if not vm.enabled then return end
-            local classified = 0
-            local meshparts = {}
-            for _, d in ipairs(Cam:GetDescendants()) do
-                if d:IsA("MeshPart") and d.MeshId ~= "" then
-                    meshparts[#meshparts + 1] = d
-                end
-                local kind = classify(d.Name)
-                if kind and isArmPart(d) then
-                    swap(d, kind)
-                    classified = classified + 1
-                end
-            end
-            -- Fallback: if classify() matched nothing but the camera has
-            -- MeshParts, those are almost certainly the viewmodel mesh set
-            -- (rivals parents viewmodel under CurrentCamera). Treat all of
-            -- them as gauntlet so Custom Arms visibly does something.
-            if classified == 0 and #meshparts > 0 then
-                print(("[kami/viewmodel] classify matched 0; fallback swap on %d MeshPart(s) under camera"):format(#meshparts))
-                for _, d in ipairs(meshparts) do
-                    if not vm.saved[d] then swap(d, "gauntlet") end
-                end
-            elseif classified == 0 and #meshparts == 0 then
-                -- No viewmodel in sight - probably no gun equipped yet.
-                -- Don't spam; just stay silent and let the DescendantAdded
-                -- hook or next sweep catch the parts when they appear.
-            end
-        end
-
-        local function applyAndSweep()
-            restoreAll()
-            if not resolveAsset() then
-                warn("[kami/viewmodel] resolve failed - toggle stays visual with skin only")
-                vm.resolved.mesh = nil
-                vm.resolved.tex  = nil
-            end
-            sweep()
-        end
-
-        -- ---- UI ----
-        local miscTab = _tabObjects[4]
-        if not miscTab then return end
-
-        local vmSec = UI.createSection(miscTab, "View Model", "right")
-        local vmToggle = UI.addToggle(vmSec, "Custom Arms", false, function(v)
-            vm.enabled = v
-            if v then applyAndSweep() else restoreAll() end
-        end)
-        UI.addDropdown(vmSec, "Arms Preset", ARM_PRESET_ORDER, vm.preset_name, function(selected)
-            vm.preset_name = selected
-            vm.asset_id    = ARM_PRESETS[selected] or vm.asset_id
-            -- Clear the resolved cache so applyAndSweep re-fetches the new asset
-            vm.resolved.mesh = nil
-            vm.resolved.tex  = nil
-            if vm.enabled then applyAndSweep() end
-        end)
-        -- All other controls (Mesh/Texture overrides, Forearm Skin, Apply/Rescan,
-        -- Restore Arms) hidden by operator request. The toggle + preset dropdown
-        -- are the only visible controls; everything else uses baked-in defaults.
-
-        -- ---- hooks: weapon switch + camera reswap + 3Hz re-sweep ----
-        Cam.DescendantAdded:Connect(function(d)
-            if not vm.enabled then return end
-            local kind = classify(d.Name)
-            if kind and isArmPart(d) then
-                task.defer(function() if vm.enabled then swap(d, kind) end end)
-            elseif d:IsA("MeshPart") and d.MeshId ~= "" then
-                -- Fallback catches new viewmodel meshes on weapon switch
-                -- even when their part names don't match classify().
-                task.defer(function()
-                    if vm.enabled and not vm.saved[d] then swap(d, "gauntlet") end
                 end)
             end
+            if obj then
+                print("[kami/vm] loaded: " .. obj.ClassName .. " '" .. obj.Name .. "'")
+            else
+                warn("[kami/vm] FAILED to load " .. url)
+            end
+            return obj
+        end
+
+        -- Walk a model/instance and collect all MeshParts.
+        local function collectMeshes(root)
+            local out = {}
+            if root:IsA("MeshPart") then out[#out + 1] = root end
+            for _, d in ipairs(root:GetDescendants()) do
+                if d:IsA("MeshPart") then out[#out + 1] = d end
+            end
+            return out
+        end
+
+        -- Hide rivals' original viewmodel arm parts by cranking their
+        -- LocalTransparencyModifier. Store originals for restore.
+        local function hideOriginalArms()
+            for _, d in ipairs(Cam:GetDescendants()) do
+                if d:IsA("BasePart") then
+                    local n = d.Name:lower()
+                    if n:find("arm") or n:find("hand") or n:find("glove") or n:find("sleeve") or n:find("gauntlet") or n:find("wrist") or n:find("forearm") then
+                        if vm.hidden_parts[d] == nil then
+                            vm.hidden_parts[d] = d.LocalTransparencyModifier
+                            pcall(function() d.LocalTransparencyModifier = 1 end)
+                        end
+                    end
+                end
+            end
+        end
+
+        local function restoreOriginalArms()
+            for part, orig in pairs(vm.hidden_parts) do
+                pcall(function() part.LocalTransparencyModifier = orig end)
+            end
+            vm.hidden_parts = {}
+        end
+
+        -- Build + attach the overlay. Scales the outfit model, strips its
+        -- scripts, parents under Cam, anchors parts and follows Camera.CFrame
+        -- every RenderStepped.
+        local function buildOverlay()
+            if vm.overlay then
+                pcall(function() vm.overlay:Destroy() end)
+                vm.overlay = nil
+            end
+            local id = ARM_PRESETS[vm.preset]
+            if not id then
+                warn("[kami/vm] no preset id for " .. tostring(vm.preset))
+                return
+            end
+            local loaded = loadAsset(id)
+            if not loaded then return end
+
+            -- Wrap in a Model so we can clone + attach cleanly
+            local wrapper = Instance.new("Model")
+            wrapper.Name = "KamiArmsOverlay"
+            if loaded:IsA("Model") then
+                for _, child in ipairs(loaded:GetChildren()) do
+                    child.Parent = wrapper
+                end
+            else
+                loaded.Parent = wrapper
+            end
+            pcall(function() loaded:Destroy() end)
+
+            -- Strip scripts (don't want anything to run)
+            for _, s in ipairs(wrapper:GetDescendants()) do
+                if s:IsA("Script") or s:IsA("LocalScript") or s:IsA("ModuleScript") then
+                    pcall(function() s:Destroy() end)
+                end
+            end
+
+            -- Prep every BasePart for overlay use
+            local parts = {}
+            for _, d in ipairs(wrapper:GetDescendants()) do
+                if d:IsA("BasePart") then
+                    parts[#parts + 1] = d
+                    pcall(function()
+                        d.Anchored     = true
+                        d.CanCollide   = false
+                        d.CanQuery     = false
+                        d.CanTouch     = false
+                        d.CastShadow   = false
+                        d.Massless     = true
+                    end)
+                end
+            end
+            if #parts == 0 then
+                warn("[kami/vm] overlay has 0 BaseParts - asset has no visible geometry")
+                pcall(function() wrapper:Destroy() end)
+                return
+            end
+            print(("[kami/vm] overlay built: %d BaseParts"):format(#parts))
+
+            -- Pick a primary part - prefer anything named like a hand/arm, fallback to first
+            local primary
+            for _, p in ipairs(parts) do
+                local n = p.Name:lower()
+                if n:find("arm") or n:find("hand") or n:find("glove") then primary = p; break end
+            end
+            primary = primary or parts[1]
+            wrapper.PrimaryPart = primary
+
+            wrapper.Parent = Cam
+            vm.overlay = wrapper
+
+            -- Store offsets of each part relative to primary so we can move together
+            local offsets = {}
+            local invPrim = primary.CFrame:Inverse()
+            for _, p in ipairs(parts) do
+                offsets[p] = invPrim * p.CFrame
+            end
+
+            -- Follow the camera CFrame every frame
+            local conn
+            conn = RunService.RenderStepped:Connect(function()
+                if not vm.enabled or not wrapper.Parent then
+                    if conn then conn:Disconnect() end; return
+                end
+                local camCF = Cam.CFrame
+                local target = camCF * CFrame.new(0.5, vm.offset_down, -vm.offset_fwd)
+                local scale = vm.scale
+                for p, off in pairs(offsets) do
+                    pcall(function()
+                        p.CFrame = target * off
+                        if p:IsA("MeshPart") then p.Size = p.Size end -- no-op touch to force refresh
+                    end)
+                end
+            end)
+        end
+
+        local function enable()
+            vm.enabled = true
+            hideOriginalArms()
+            buildOverlay()
+        end
+        local function disable()
+            vm.enabled = false
+            if vm.overlay then pcall(function() vm.overlay:Destroy() end); vm.overlay = nil end
+            restoreOriginalArms()
+        end
+
+        -- UI
+        local vmSec = UI.createSection(miscTab, "View Model", "right")
+        local vmToggle = UI.addToggle(vmSec, "Custom Arms", false, function(v)
+            if v then enable() else disable() end
         end)
-        Cam.DescendantRemoving:Connect(function(d)
-            if vm.saved[d] then vm.saved[d] = nil end
+        UI.addDropdown(vmSec, "Arms Preset", ARM_PRESET_ORDER, vm.preset, function(sel)
+            vm.preset = sel
+            if vm.enabled then
+                disable(); enable()
+            end
         end)
+        UI.addSlider(vmSec, "Forward Offset", 0.5, 5.0, 2.0, true, function(v) vm.offset_fwd = v end)
+        UI.addSlider(vmSec, "Down Offset", -3.0, 0.0, -0.8, true, function(v) vm.offset_down = v end)
+        UI.addButton(vmSec, "Rebuild", function()
+            if vm.enabled then disable(); enable() end
+        end)
+
+        -- Re-attach on camera swap (respawn)
         workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
             local nc = workspace.CurrentCamera
             if nc and nc ~= Cam then
                 Cam = nc
-                if vm.enabled then sweep() end
+                if vm.enabled then disable(); enable() end
             end
         end)
-        local acc = 0
-        RunService.Heartbeat:Connect(function(dt)
-            if not vm.enabled then return end
-            acc = acc + dt
-            if acc >= 0.33 then acc = 0; sweep() end
-        end)
-        print("[kamidere] addon: viewmodel section built")
+
+        print("[kamidere] addon: viewmodel (overlay) section built")
         end) -- pcall
         if not __ok then warn("[kamidere] VIEW MODEL ERROR: " .. tostring(__err)) end
     end)
