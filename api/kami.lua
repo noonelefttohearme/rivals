@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-07.r22"
+    local KAMI_BUILD = "2026-11-07.r23"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -493410,6 +493410,328 @@ end)
         print("[kamidere] addon: search-bar ready")
         end) -- pcall
         if not __ok then warn("[kamidere] SEARCH BAR ERROR: " .. tostring(__err)) end
+    end)
+
+    -- ============================================================
+    -- [UI POLISH] - operator picks 2/3/4/5/7/10/11/12
+    -- Section icons + hover glow, search bar polish, draggable
+    -- menu, custom scrollbars, glass blur, keybinds widget,
+    -- better tab fade, slider value bubble.
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: ui-polish starting")
+        task.wait(5) -- let every section finish building first
+
+        -- -------- #11 glass blur: bump max blur + semi-trans mainFrame --------
+        pcall(function()
+            if mainFrame then
+                mainFrame.BackgroundTransparency = 0.08
+            end
+        end)
+        -- Hook into _showMenu's existing blur tween by watching Size
+        if _menuBlur then
+            _menuBlur:GetPropertyChangedSignal("Size"):Connect(function()
+                if _menuBlur.Size > 0 and _menuBlur.Size < 28 then
+                    pcall(function() _menuBlur.Size = 28 end)
+                end
+            end)
+        end
+
+        -- -------- #7 draggable menu via the title bar region --------
+        -- We hook the TOP strip of mainFrame (0..45 px) for click-drag.
+        pcall(function()
+            local dragHandle = Instance.new("Frame")
+            dragHandle.Name = "DragHandle"
+            dragHandle.Size = UDim2.new(1, -220, 0, 44)
+            dragHandle.Position = UDim2.new(0, 0, 0, 0)
+            dragHandle.BackgroundTransparency = 1
+            dragHandle.ZIndex = 15
+            dragHandle.Parent = mainFrame
+            local dragging, dragStart, startPos = false, nil, nil
+            dragHandle.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = true
+                    dragStart = input.Position
+                    startPos = mainFrame.Position
+                    input.Changed:Connect(function()
+                        if input.UserInputState == Enum.UserInputState.End then dragging = false end
+                    end)
+                end
+            end)
+            UserInputService.InputChanged:Connect(function(input)
+                if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                    local delta = input.Position - dragStart
+                    mainFrame.Position = UDim2.new(
+                        startPos.X.Scale, startPos.X.Offset + delta.X,
+                        startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+                end
+            end)
+        end)
+
+        -- -------- #10 custom scrollbars --------
+        local function polishScroll(sf)
+            if not sf:IsA("ScrollingFrame") then return end
+            pcall(function()
+                sf.ScrollBarThickness        = 4
+                sf.ScrollBarImageColor3      = COLORS.Accent
+                sf.ScrollBarImageTransparency = 0.5
+                sf.BottomImage               = ""
+                sf.MidImage                  = ""
+                sf.TopImage                  = ""
+            end)
+        end
+        for _, tab in ipairs(UI.tabs or {}) do
+            polishScroll(tab.scrollFrame)
+            polishScroll(tab.leftCol)
+            polishScroll(tab.rightCol)
+        end
+
+        -- -------- #5 search bar polish: focus stroke + clear-X --------
+        local searchFrame = mainFrame:FindFirstChild("SearchBar")
+        if searchFrame then
+            local box = searchFrame:FindFirstChildOfClass("TextBox")
+            local stroke = searchFrame:FindFirstChildOfClass("UIStroke")
+            if box and stroke then
+                box.Focused:Connect(function()
+                    tween(stroke, { Color = COLORS.AccentGlow, Thickness = 1.5 }, 0.2)
+                end)
+                box.FocusLost:Connect(function()
+                    tween(stroke, { Color = COLORS.DropdownBorder, Thickness = 1 }, 0.2)
+                end)
+
+                local clearBtn = Instance.new("TextButton")
+                clearBtn.Name = "ClearSearch"
+                clearBtn.Size = UDim2.new(0, 16, 0, 16)
+                clearBtn.Position = UDim2.new(1, -20, 0.5, -8)
+                clearBtn.BackgroundTransparency = 1
+                clearBtn.Text = "×"
+                clearBtn.TextColor3 = COLORS.TextMuted
+                clearBtn.TextSize = 14
+                if UI_FONT then pcall(function() clearBtn.FontFace = UI_FONT end) end
+                clearBtn.ZIndex = 25
+                clearBtn.Visible = false
+                clearBtn.Parent = searchFrame
+                clearBtn.MouseButton1Click:Connect(function()
+                    box.Text = ""; box:CaptureFocus()
+                end)
+                box:GetPropertyChangedSignal("Text"):Connect(function()
+                    clearBtn.Visible = #box.Text > 0
+                    box.Size = UDim2.new(1, (#box.Text > 0 and -44 or -24), 1, -2)
+                end)
+            end
+        end
+
+        -- -------- #3 section icons + hover glow --------
+        for _, tab in ipairs(UI.tabs or {}) do
+            for _, col in ipairs({ tab.leftCol, tab.rightCol }) do
+                if col then
+                    for _, sec in ipairs(col:GetChildren()) do
+                        if sec:IsA("Frame") and sec.Name:sub(1, 8) == "Section_" then
+                            local title = sec:FindFirstChild("Title")
+                            local cardBox = sec:FindFirstChild("CardBox")
+                            if title and cardBox then
+                                -- Small accent dot before title
+                                local dot = Instance.new("Frame")
+                                dot.Name = "AccentDot"
+                                dot.Size = UDim2.new(0, 4, 0, 4)
+                                dot.Position = UDim2.new(0, 0, 0.5, -2)
+                                dot.BackgroundColor3 = COLORS.AccentGlow
+                                dot.BorderSizePixel = 0
+                                dot.AnchorPoint = Vector2.new(0, 0.5)
+                                dot.Parent = sec
+                                local dc = Instance.new("UICorner"); dc.CornerRadius = UDim.new(1, 0); dc.Parent = dot
+                                -- Shift title right 6px to make room
+                                title.Position = UDim2.new(0, 10, 0, 4)
+                                -- Hover outer glow on the card
+                                local glow = Instance.new("UIStroke")
+                                glow.Color = COLORS.AccentGlow
+                                glow.Thickness = 0
+                                glow.Transparency = 0.5
+                                glow.Parent = cardBox
+                                cardBox.MouseEnter:Connect(function()
+                                    tween(glow, { Thickness = 1.5 }, 0.2)
+                                end)
+                                cardBox.MouseLeave:Connect(function()
+                                    tween(glow, { Thickness = 0 }, 0.2)
+                                end)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        -- -------- #4 extended tab transitions --------
+        -- Patch UI.switchTab to also fade the content for a smoother wipe.
+        -- (keeps existing blur overlay)
+        local originalSwitch = UI.switchTab
+        UI.switchTab = function(index)
+            local currentIdx
+            for i, t in ipairs(UI.tabs) do
+                if t.scrollFrame.Visible then currentIdx = i; break end
+            end
+            if currentIdx == index then return end
+            -- Fade the previous tab out briefly before letting the original flip
+            if currentIdx and UI.tabs[currentIdx] then
+                local sf = UI.tabs[currentIdx].scrollFrame
+                pcall(function()
+                    for _, child in ipairs(sf:GetDescendants()) do
+                        if child:IsA("TextLabel") or child:IsA("TextButton") then
+                            pcall(function()
+                                child.TextTransparency = 0.5
+                                task.delay(0.1, function() pcall(function() child.TextTransparency = 0 end) end)
+                            end)
+                        end
+                    end
+                end)
+            end
+            originalSwitch(index)
+        end
+
+        -- -------- #2 slider value bubble on hover/drag (retrofit) --------
+        for _, tab in ipairs(UI.tabs or {}) do
+            for _, col in ipairs({ tab.leftCol, tab.rightCol }) do
+                if col then
+                    for _, sec in ipairs(col:GetChildren()) do
+                        local cardBox = sec:IsA("Frame") and sec:FindFirstChild("CardBox")
+                        local container = cardBox and cardBox:FindFirstChild("Container")
+                        if container then
+                            for _, ctrl in ipairs(container:GetChildren()) do
+                                if ctrl:IsA("Frame") and ctrl.Name:sub(1, 7) == "Slider_" then
+                                    local valLabel
+                                    for _, c in ipairs(ctrl:GetChildren()) do
+                                        if c:IsA("TextLabel") and c.TextXAlignment == Enum.TextXAlignment.Right then
+                                            valLabel = c; break
+                                        end
+                                    end
+                                    if valLabel then
+                                        ctrl.MouseEnter:Connect(function()
+                                            tween(valLabel, { TextColor3 = COLORS.AccentGlow }, 0.15)
+                                        end)
+                                        ctrl.MouseLeave:Connect(function()
+                                            tween(valLabel, { TextColor3 = COLORS.TextPrimary }, 0.15)
+                                        end)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        -- -------- #12 keybinds indicator widget (matches reference image) --------
+        local kbGui = Instance.new("ScreenGui")
+        kbGui.Name = "KamidereKeybinds"
+        kbGui.ResetOnSpawn = false
+        kbGui.IgnoreGuiInset = true
+        kbGui.DisplayOrder = 20
+        kbGui.Parent = playerGui
+
+        local kbFrame = Instance.new("Frame")
+        kbFrame.Name = "KeybindsPanel"
+        kbFrame.AnchorPoint = Vector2.new(0, 0.5)
+        kbFrame.Position = UDim2.new(0, 10, 0.5, 0)
+        kbFrame.Size = UDim2.new(0, 220, 0, 160)
+        kbFrame.BackgroundTransparency = 1
+        kbFrame.AutomaticSize = Enum.AutomaticSize.Y
+        kbFrame.Parent = kbGui
+
+        local kbLayout = Instance.new("UIListLayout")
+        kbLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        kbLayout.Padding = UDim.new(0, 2)
+        kbLayout.Parent = kbFrame
+
+        local kbHeader = Instance.new("TextLabel")
+        kbHeader.Name = "Header"
+        kbHeader.Size = UDim2.new(1, 0, 0, 18)
+        kbHeader.BackgroundTransparency = 1
+        kbHeader.Text = "Keybinds"
+        kbHeader.TextColor3 = COLORS.AccentGlow
+        kbHeader.TextStrokeTransparency = 0
+        kbHeader.TextSize = 14
+        kbHeader.TextXAlignment = Enum.TextXAlignment.Left
+        if UI_FONT then pcall(function() kbHeader.FontFace = UI_FONT end) end
+        kbHeader.LayoutOrder = 0
+        kbHeader.Parent = kbFrame
+
+        local function shortKey(name)
+            local n = tostring(name or "")
+            local map = {
+                LeftShift="LSHIFT", RightShift="RSHIFT", LeftControl="LCTRL", RightControl="RCTRL",
+                LeftAlt="LALT", RightAlt="RALT", Backspace="BACK", Return="ENTER",
+                Space="SPACE", CapsLock="CAPS", Tab="TAB", Delete="DEL", Insert="INS",
+                Up="UP", Down="DOWN", Left="LEFT", Right="RIGHT",
+            }
+            return map[n] or n
+        end
+        local function prettify(key)
+            local s = key:gsub("^[^_]+_", ""):gsub("_", " ")
+            s = s:gsub("(%l)(%u)", function(a, b) return a .. " " .. b end)
+            return s:lower()
+        end
+
+        local existingRows = {}
+        local function refresh()
+            -- Collect: iterate Options for KeyPicker-shaped entries that have a non-Unknown key
+            local entries = {}
+            for k, obj in pairs(getgenv().Options or {}) do
+                if type(obj) == "table" then
+                    local isKB = (obj.Type == "KeyPicker")
+                        or (typeof(obj.Value) == "EnumItem" and obj.Value.EnumType == Enum.KeyCode)
+                    if isKB then
+                        local key = obj.Value
+                        if typeof(key) == "EnumItem" and key ~= Enum.KeyCode.Unknown then
+                            -- Mode guess
+                            local mode = obj.Mode or "Toggle"
+                            if type(mode) ~= "string" then mode = "Toggle" end
+                            entries[#entries + 1] = { key = key, label = prettify(k), mode = mode, raw = k }
+                        end
+                    end
+                end
+            end
+            table.sort(entries, function(a, b) return a.label < b.label end)
+
+            -- Reuse / build rows
+            local keep = {}
+            for i, e in ipairs(entries) do
+                local rowKey = e.raw .. ":" .. e.key.Name
+                keep[rowKey] = true
+                local row = existingRows[rowKey]
+                if not row then
+                    row = Instance.new("TextLabel")
+                    row.Name = "KB_" .. rowKey
+                    row.Size = UDim2.new(1, 0, 0, 16)
+                    row.BackgroundTransparency = 1
+                    row.TextColor3 = COLORS.TextPrimary
+                    row.TextStrokeTransparency = 0
+                    row.TextSize = 13
+                    row.TextXAlignment = Enum.TextXAlignment.Left
+                    if UI_FONT then pcall(function() row.FontFace = UI_FONT end) end
+                    row.Parent = kbFrame
+                    existingRows[rowKey] = row
+                end
+                row.LayoutOrder = i
+                row.Text = string.format("[%s] %s (%s)", shortKey(e.key.Name), e.label, e.mode)
+            end
+            for k, row in pairs(existingRows) do
+                if not keep[k] then row:Destroy(); existingRows[k] = nil end
+            end
+            kbFrame.Visible = (#entries > 0)
+        end
+
+        refresh()
+        task.spawn(function()
+            while kbGui.Parent do
+                task.wait(0.75)
+                pcall(refresh)
+            end
+        end)
+
+        print("[kamidere] addon: ui-polish ready")
+        end) -- pcall
+        if not __ok then warn("[kamidere] UI POLISH ERROR: " .. tostring(__err)) end
     end)
 
     -- ============================================================
