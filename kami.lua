@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-05.r17"
+    local KAMI_BUILD = "2026-11-07.r18"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -492733,6 +492733,517 @@ end)
         print("[kamidere] addon: fortnite-damage section built")
         end) -- pcall
         if not __ok then warn("[kamidere] FORTNITE DAMAGE ERROR: " .. tostring(__err)) end
+    end)
+
+    -- ============================================================
+    -- [SLEEPY PORT] - features pulled from sleepy.lua
+    -- HvH / anti-aim + movement/exploits + target priority +
+    -- visuals/world + HUD/crosshair + Rage Sahur + Riot Shield
+    -- Check + Unload Cheat. Complex HvH packet work is shimmed
+    -- with best-effort client-side variants.
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: sleepy-port starting")
+        task.wait(3)
+
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
+
+        local Players_SP   = game:GetService("Players")
+        local LP_SP        = Players_SP.LocalPlayer
+        local Lighting_SP  = game:GetService("Lighting")
+        local Tween_SP     = game:GetService("TweenService")
+        local Debris_SP    = game:GetService("Debris")
+        local TS_SP        = game:GetService("TeleportService")
+        local HTTP_SP      = game:GetService("HttpService")
+
+        local sp = {
+            -- HvH / anti-aim
+            fake_pos_enabled = false, fake_pos_offset = 5,
+            jitter_enabled = false, jitter_speed = 10,
+            spinbot_enabled = false, spinbot_yaw = 8,
+            zero_pitch = false, backward_look = false,
+            static_rot_enabled = false, static_rot_angle = 180,
+            hide_head_angle = false,
+            voidspam_enabled = false, voidspam_depth = 50,
+            -- Movement / exploits
+            walk_mul_enabled = false, walk_mul = 1.5,
+            flight_speed_enabled = false, flight_speed = 50,
+            inf_jumps_enabled = false, jumps_used = 0,
+            preserve_dir = false,
+            auto_noclip = false, underground_depth = 20,
+            lag_mode = false,
+            -- Target priority
+            priority_list = {},   -- name (lowercase) -> true
+            no_target_list = {},  -- name (lowercase) -> true
+            smart_lowest_hp = false,
+            hit_chance = 100, reaction_delay = 0,
+            -- World / visuals
+            skybox_preset = "Default",
+            atm_haze = 0, atm_density = 0.3, atm_decay = Color3.new(0,0,0),
+            atm_glare = 0, atm_color = Color3.new(1,1,1),
+            fog_color = Color3.fromRGB(192,192,192), fog_start = 0, fog_end = 10000,
+            global_shadows = true, shadow_softness = 0.5,
+            cc_brightness = 0, cc_contrast = 0, cc_saturation = 0, cc_tint = Color3.new(1,1,1),
+            ambient_override = false, ambient_color = Color3.new(0.5,0.5,0.5),
+            exposure = 0, hide_char = false,
+            third_person = false, custom_fov = 70,
+            -- Crosshair / HUD
+            crosshair_enabled = false, cross_rainbow = false, cross_speed = 1,
+            cross_length = 10, cross_thickness = 2, cross_outlines = true,
+            cross_color = Color3.new(1,1,1), cross_outline_color = Color3.new(0,0,0),
+            center_dot = false, dot_size = 3, dot_color = Color3.fromRGB(255,0,0),
+            fov_vis = false, fov_radius = 150, fov_filled = false,
+            hit_pulse_enabled = false, hit_pulse_size = 40, hit_pulse_color = Color3.fromRGB(255,215,0),
+            hud_scale = 1.0,
+            win_streak_enabled = false, win_streak = 0, streak_color = Color3.fromRGB(255,220,100),
+            -- Specific features
+            rage_sahur_enabled = false, rage_sahur_sound = nil,
+            riot_shield_check = false,
+        }
+
+        local function nameKey(s) return tostring(s or ""):lower():gsub("%s+", "") end
+        local function isEnemy(plr)
+            if plr == LP_SP then return false end
+            if plr.Team and LP_SP.Team and plr.Team == LP_SP.Team then return false end
+            return true
+        end
+
+        -- ============== HvH / Anti-aim ==============
+        local hvhSec = UI.createSection(miscTab, "HvH / Anti-Aim", "left")
+        UI.addToggle(hvhSec, "Fake Position (shim)", false, function(v) sp.fake_pos_enabled = v end)
+        UI.addSlider(hvhSec, "Fake Pos Offset", 1, 30, 5, true, function(v) sp.fake_pos_offset = v end)
+        UI.addToggle(hvhSec, "Jitter", false, function(v) sp.jitter_enabled = v end)
+        UI.addSlider(hvhSec, "Jitter Speed", 1, 60, 10, true, function(v) sp.jitter_speed = v end)
+        UI.addToggle(hvhSec, "Spinbot", false, function(v) sp.spinbot_enabled = v end)
+        UI.addSlider(hvhSec, "Spin Yaw Speed", 1, 60, 8, true, function(v) sp.spinbot_yaw = v end)
+        UI.addToggle(hvhSec, "Zero Pitch", false, function(v) sp.zero_pitch = v end)
+        UI.addToggle(hvhSec, "Backward Look", false, function(v) sp.backward_look = v end)
+        UI.addToggle(hvhSec, "Static Rotation", false, function(v) sp.static_rot_enabled = v end)
+        UI.addSlider(hvhSec, "Static Angle", -180, 180, 180, true, function(v) sp.static_rot_angle = v end)
+        UI.addToggle(hvhSec, "Hide Head Angle", false, function(v) sp.hide_head_angle = v end)
+        UI.addToggle(hvhSec, "Voidspam Desync", false, function(v) sp.voidspam_enabled = v end)
+        UI.addSlider(hvhSec, "Voidspam Depth", 10, 200, 50, true, function(v) sp.voidspam_depth = v end)
+
+        -- RenderStepped-driven HvH character manipulation
+        local spinPhase = 0
+        RunService.Heartbeat:Connect(function(dt)
+            local char = LP_SP.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+
+            if sp.spinbot_enabled then
+                spinPhase = spinPhase + sp.spinbot_yaw * dt
+                pcall(function()
+                    hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(0, spinPhase, 0)
+                end)
+            elseif sp.jitter_enabled then
+                pcall(function()
+                    hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(0, math.random() * math.pi * 2, 0)
+                end)
+            elseif sp.static_rot_enabled then
+                pcall(function()
+                    hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(0, math.rad(sp.static_rot_angle), 0)
+                end)
+            elseif sp.backward_look then
+                pcall(function()
+                    local look = hrp.CFrame.LookVector
+                    hrp.CFrame = CFrame.lookAt(hrp.Position, hrp.Position - look)
+                end)
+            end
+
+            if sp.voidspam_enabled then
+                pcall(function()
+                    hrp.CFrame = hrp.CFrame + Vector3.new(0, -sp.voidspam_depth, 0)
+                    task.delay(0.05, function()
+                        if hrp.Parent then
+                            hrp.CFrame = hrp.CFrame + Vector3.new(0, sp.voidspam_depth, 0)
+                        end
+                    end)
+                end)
+            end
+        end)
+
+        -- ============== Movement / Exploits ==============
+        local movSec = UI.createSection(miscTab, "Movement / Exploits", "left")
+        UI.addToggle(movSec, "Walk Speed Multiplier", false, function(v) sp.walk_mul_enabled = v end)
+        UI.addSlider(movSec, "Walk Mul", 1, 10, 1.5, true, function(v) sp.walk_mul = v end)
+        UI.addToggle(movSec, "Flight Speed Override", false, function(v) sp.flight_speed_enabled = v end)
+        UI.addSlider(movSec, "Flight Speed", 10, 500, 50, true, function(v) sp.flight_speed = v end)
+        UI.addToggle(movSec, "Infinite Double Jumps", false, function(v) sp.inf_jumps_enabled = v end)
+        UI.addToggle(movSec, "Preserve Movement Direction", false, function(v) sp.preserve_dir = v end)
+        UI.addToggle(movSec, "Auto Noclip Underground", false, function(v) sp.auto_noclip = v end)
+        UI.addSlider(movSec, "Underground Depth", 5, 100, 20, true, function(v) sp.underground_depth = v end)
+        UI.addToggle(movSec, "Lag Mode (shim)", false, function(v) sp.lag_mode = v end)
+        UI.addButton(movSec, "Void Teleport", function()
+            local char = LP_SP.Character; local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then hrp.CFrame = hrp.CFrame + Vector3.new(0, -500, 0) end
+        end)
+        UI.addButton(movSec, "Jump Pad", function()
+            local char = LP_SP.Character; local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then hrp.AssemblyLinearVelocity = Vector3.new(0, 150, 0) end
+        end)
+        UI.addButton(movSec, "Rejoin Server", function()
+            pcall(function() TS_SP:TeleportToPlaceInstance(game.PlaceId, game.JobId, LP_SP) end)
+        end)
+        UI.addButton(movSec, "Server Hop", function()
+            pcall(function()
+                local servers = HTTP_SP:JSONDecode(game:HttpGet(
+                    "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
+                for _, s in ipairs(servers.data or {}) do
+                    if s.playing < s.maxPlayers and s.id ~= game.JobId then
+                        TS_SP:TeleportToPlaceInstance(game.PlaceId, s.id, LP_SP); break
+                    end
+                end
+            end)
+        end)
+
+        -- Walk speed + flight + inf jumps + auto noclip holds
+        RunService.Heartbeat:Connect(function()
+            local char = LP_SP.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hum and sp.walk_mul_enabled then
+                pcall(function() hum.WalkSpeed = 16 * sp.walk_mul end)
+            end
+            if sp.auto_noclip and hrp and hrp.Position.Y < -sp.underground_depth then
+                for _, p in ipairs(char:GetDescendants()) do
+                    if p:IsA("BasePart") then pcall(function() p.CanCollide = false end) end
+                end
+            end
+        end)
+        if LP_SP.Character then
+            local h = LP_SP.Character:FindFirstChildOfClass("Humanoid")
+            if h then
+                h.StateChanged:Connect(function(_, new)
+                    if sp.inf_jumps_enabled and new == Enum.HumanoidStateType.Landed then
+                        sp.jumps_used = 0
+                    end
+                end)
+            end
+        end
+        UserInputService.InputBegan:Connect(function(input, gp)
+            if gp or not sp.inf_jumps_enabled then return end
+            if input.KeyCode == Enum.KeyCode.Space then
+                local char = LP_SP.Character
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    pcall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end)
+                end
+            end
+        end)
+
+        -- ============== Target Priority ==============
+        local prioSec = UI.createSection(miscTab, "Target Priority", "left")
+        UI.addToggle(prioSec, "Smart Lowest HP", false, function(v) sp.smart_lowest_hp = v end)
+        UI.addSlider(prioSec, "Hit Chance", 0, 100, 100, false, function(v) sp.hit_chance = v end)
+        UI.addSlider(prioSec, "Reaction Delay ms", 0, 500, 0, false, function(v) sp.reaction_delay = v end)
+        UI.addTextBox(prioSec, "Priority: add player name", function(s)
+            if s and s ~= "" then sp.priority_list[nameKey(s)] = true end
+        end)
+        UI.addTextBox(prioSec, "No Target: add player name", function(s)
+            if s and s ~= "" then sp.no_target_list[nameKey(s)] = true end
+        end)
+        UI.addButton(prioSec, "Clear Priority List", function() sp.priority_list = {} end)
+        UI.addButton(prioSec, "Clear No Target List", function() sp.no_target_list = {} end)
+        UI.addToggle(prioSec, "Riot Shield Check", false, function(v) sp.riot_shield_check = v end)
+        -- Expose helpers so the VM's own ragebot (if wired) can ask us
+        getgenv()._kami_IsPriority = function(name)
+            return sp.priority_list[nameKey(name)] == true
+        end
+        getgenv()._kami_IsNoTarget = function(name)
+            return sp.no_target_list[nameKey(name)] == true
+        end
+        getgenv()._kami_ShieldBlocks = function(targetRoot, shooterPos)
+            if not sp.riot_shield_check then return false end
+            if not targetRoot then return false end
+            local char = targetRoot.Parent
+            local shield = char and (char:FindFirstChild("Riot Shield") or char:FindFirstChild("Shield"))
+            if not shield then return false end
+            local look = targetRoot.CFrame.LookVector
+            local dir = (shooterPos - targetRoot.Position).Unit
+            return look:Dot(dir) < -0.2
+        end
+
+        -- ============== Visuals / World ==============
+        local worldSec = UI.createSection(miscTab, "World Visuals", "right")
+
+        local SKYBOX_PRESETS = {
+            ["Default"]       = nil,
+            ["Night Sky"]     = { Up="rbxassetid://159454275", Dn="rbxassetid://159454308", Lf="rbxassetid://159454299", Rt="rbxassetid://159454296", Ft="rbxassetid://159454278", Bk="rbxassetid://159454292" },
+            ["Deep Space"]    = { Up="rbxassetid://159454275", Dn="rbxassetid://159454308", Lf="rbxassetid://159454299", Rt="rbxassetid://159454296", Ft="rbxassetid://159454278", Bk="rbxassetid://159454292" },
+            ["Purple Nebula"] = { Up="rbxassetid://159454275", Dn="rbxassetid://159454308", Lf="rbxassetid://159454299", Rt="rbxassetid://159454296", Ft="rbxassetid://159454278", Bk="rbxassetid://159454292" },
+            ["Red Galaxy"]    = { Up="rbxassetid://159454275", Dn="rbxassetid://159454308", Lf="rbxassetid://159454299", Rt="rbxassetid://159454296", Ft="rbxassetid://159454278", Bk="rbxassetid://159454292" },
+            ["Pastel Ghost"]  = { Up="rbxassetid://257806893", Dn="rbxassetid://257806893", Lf="rbxassetid://257806893", Rt="rbxassetid://257806893", Ft="rbxassetid://257806893", Bk="rbxassetid://257806893" },
+            ["Shining Star"]  = { Up="rbxassetid://12064107", Dn="rbxassetid://12064152", Lf="rbxassetid://12064131", Rt="rbxassetid://12064149", Ft="rbxassetid://12064121", Bk="rbxassetid://12064141" },
+        }
+        local savedSky
+        local function applySkybox(name)
+            if name == "Default" then
+                if savedSky then pcall(function() savedSky.Parent = Lighting_SP end); savedSky = nil end
+                for _, s in ipairs(Lighting_SP:GetChildren()) do
+                    if s:IsA("Sky") and s.Name == "_KamiSky" then s:Destroy() end
+                end
+                return
+            end
+            local preset = SKYBOX_PRESETS[name]; if not preset then return end
+            for _, s in ipairs(Lighting_SP:GetChildren()) do
+                if s:IsA("Sky") and s.Name ~= "_KamiSky" then
+                    savedSky = s; s.Parent = nil; break
+                end
+            end
+            local sky = Lighting_SP:FindFirstChild("_KamiSky") or Instance.new("Sky")
+            sky.Name = "_KamiSky"
+            sky.SkyboxUp, sky.SkyboxDn = preset.Up, preset.Dn
+            sky.SkyboxLf, sky.SkyboxRt = preset.Lf, preset.Rt
+            sky.SkyboxFt, sky.SkyboxBk = preset.Ft, preset.Bk
+            sky.Parent = Lighting_SP
+        end
+
+        UI.addDropdown(worldSec, "Skybox Preset", {"Default","Night Sky","Deep Space","Purple Nebula","Red Galaxy","Pastel Ghost","Shining Star"}, "Default", function(v)
+            sp.skybox_preset = v; applySkybox(v)
+        end)
+
+        -- Atmosphere management
+        local function ensureAtm()
+            local a = Lighting_SP:FindFirstChildOfClass("Atmosphere")
+            if not a then a = Instance.new("Atmosphere"); a.Parent = Lighting_SP end
+            return a
+        end
+        UI.addSlider(worldSec, "Atmosphere Haze", 0, 10, 0, true, function(v) sp.atm_haze = v; ensureAtm().Haze = v end)
+        UI.addSlider(worldSec, "Atmosphere Density", 0, 1, 0.3, true, function(v) sp.atm_density = v; ensureAtm().Density = v end)
+        UI.addSlider(worldSec, "Atmosphere Glare", 0, 10, 0, true, function(v) sp.atm_glare = v; ensureAtm().Glare = v end)
+        UI.addColorPicker(worldSec, "Atmosphere Color", sp.atm_color, function(c) sp.atm_color = c; ensureAtm().Color = c end)
+
+        -- Fog
+        UI.addColorPicker(worldSec, "Fog Color", sp.fog_color, function(c) sp.fog_color = c; Lighting_SP.FogColor = c end)
+        UI.addSlider(worldSec, "Fog Start", 0, 1000, 0, true, function(v) sp.fog_start = v; Lighting_SP.FogStart = v end)
+        UI.addSlider(worldSec, "Fog End", 10, 10000, 10000, true, function(v) sp.fog_end = v; Lighting_SP.FogEnd = v end)
+
+        -- Shadows
+        UI.addToggle(worldSec, "Global Shadows", true, function(v) sp.global_shadows = v; Lighting_SP.GlobalShadows = v end)
+        UI.addSlider(worldSec, "Shadow Softness", 0, 1, 0.5, true, function(v) sp.shadow_softness = v; Lighting_SP.ShadowSoftness = v end)
+
+        -- Color correction
+        local function ensureCC()
+            local cc = Lighting_SP:FindFirstChild("_KamiCC")
+            if not cc then cc = Instance.new("ColorCorrectionEffect"); cc.Name = "_KamiCC"; cc.Parent = Lighting_SP end
+            return cc
+        end
+        UI.addSlider(worldSec, "CC Brightness", -1, 1, 0, true, function(v) sp.cc_brightness = v; ensureCC().Brightness = v end)
+        UI.addSlider(worldSec, "CC Contrast",   -1, 1, 0, true, function(v) sp.cc_contrast = v; ensureCC().Contrast = v end)
+        UI.addSlider(worldSec, "CC Saturation", -1, 1, 0, true, function(v) sp.cc_saturation = v; ensureCC().Saturation = v end)
+        UI.addColorPicker(worldSec, "CC Tint", sp.cc_tint, function(c) sp.cc_tint = c; ensureCC().TintColor = c end)
+
+        -- Ambient
+        UI.addToggle(worldSec, "Ambient Override", false, function(v) sp.ambient_override = v end)
+        UI.addColorPicker(worldSec, "Ambient Color", sp.ambient_color, function(c) sp.ambient_color = c end)
+        UI.addSlider(worldSec, "Exposure", -5, 5, 0, true, function(v) sp.exposure = v; Lighting_SP.ExposureCompensation = v end)
+        RunService.RenderStepped:Connect(function()
+            if sp.ambient_override then
+                Lighting_SP.Ambient = sp.ambient_color
+                Lighting_SP.OutdoorAmbient = sp.ambient_color
+            end
+        end)
+
+        -- Hide character meshes
+        UI.addToggle(worldSec, "Hide Character Meshes", false, function(v)
+            sp.hide_char = v
+            local char = LP_SP.Character
+            if not char then return end
+            for _, p in ipairs(char:GetDescendants()) do
+                if p:IsA("BasePart") then
+                    pcall(function() p.LocalTransparencyModifier = v and 1 or 0 end)
+                end
+            end
+        end)
+
+        -- Third person + custom FOV
+        UI.addToggle(worldSec, "Third Person POV", false, function(v)
+            sp.third_person = v
+            if LP_SP then
+                pcall(function()
+                    LP_SP.CameraMode = v and Enum.CameraMode.Classic or Enum.CameraMode.LockFirstPerson
+                end)
+            end
+        end)
+        UI.addSlider(worldSec, "Custom Camera FOV", 20, 120, 70, true, function(v)
+            sp.custom_fov = v
+            local cam = workspace.CurrentCamera
+            if cam then pcall(function() cam.FieldOfView = v end) end
+        end)
+
+        -- ============== Crosshair ==============
+        local crossSec = UI.createSection(miscTab, "Crosshair", "right")
+        local crossGui = Instance.new("ScreenGui"); crossGui.Name = "KamiCrosshair"
+        crossGui.IgnoreGuiInset = true; crossGui.DisplayOrder = 50
+        crossGui.ResetOnSpawn = false; crossGui.Parent = playerGui
+        local crossRoot = Instance.new("Frame"); crossRoot.BackgroundTransparency = 1
+        crossRoot.AnchorPoint = Vector2.new(0.5, 0.5)
+        crossRoot.Position = UDim2.new(0.5, 0, 0.5, 0)
+        crossRoot.Size = UDim2.new(0, 60, 0, 60); crossRoot.Parent = crossGui
+        local function mkLine(name) local l = Instance.new("Frame"); l.Name = name; l.BorderSizePixel = 0; l.Parent = crossRoot; return l end
+        local lineN, lineS, lineE, lineW = mkLine("N"), mkLine("S"), mkLine("E"), mkLine("W")
+        local dot = Instance.new("Frame"); dot.Name = "Dot"; dot.AnchorPoint = Vector2.new(0.5,0.5)
+        dot.Position = UDim2.new(0.5, 0, 0.5, 0); dot.BorderSizePixel = 0; dot.Parent = crossRoot
+
+        UI.addToggle(crossSec, "Custom Crosshair", false, function(v) sp.crosshair_enabled = v; crossGui.Enabled = v end)
+        UI.addToggle(crossSec, "Rainbow", false, function(v) sp.cross_rainbow = v end)
+        UI.addSlider(crossSec, "Rainbow Speed", 0.1, 5, 1, true, function(v) sp.cross_speed = v end)
+        UI.addSlider(crossSec, "Length", 1, 30, 10, true, function(v) sp.cross_length = v end)
+        UI.addSlider(crossSec, "Thickness", 1, 8, 2, true, function(v) sp.cross_thickness = v end)
+        UI.addToggle(crossSec, "Outlines", true, function(v) sp.cross_outlines = v end)
+        UI.addColorPicker(crossSec, "Color", sp.cross_color, function(c) sp.cross_color = c end)
+        UI.addColorPicker(crossSec, "Outline Color", sp.cross_outline_color, function(c) sp.cross_outline_color = c end)
+        UI.addToggle(crossSec, "Center Dot", false, function(v) sp.center_dot = v end)
+        UI.addSlider(crossSec, "Dot Size", 1, 10, 3, true, function(v) sp.dot_size = v end)
+        UI.addColorPicker(crossSec, "Dot Color", sp.dot_color, function(c) sp.dot_color = c end)
+
+        local huePhase = 0
+        RunService.RenderStepped:Connect(function(dt)
+            if not sp.crosshair_enabled then crossGui.Enabled = false; return end
+            crossGui.Enabled = true
+            huePhase = (huePhase + dt * sp.cross_speed * 0.3) % 1
+            local col = sp.cross_rainbow and Color3.fromHSV(huePhase, 1, 1) or sp.cross_color
+            local th = sp.cross_thickness; local ln = sp.cross_length
+            lineN.BackgroundColor3 = col; lineN.Size = UDim2.new(0, th, 0, ln)
+            lineN.Position = UDim2.new(0.5, -th/2, 0.5, -ln - 2)
+            lineS.BackgroundColor3 = col; lineS.Size = UDim2.new(0, th, 0, ln)
+            lineS.Position = UDim2.new(0.5, -th/2, 0.5, 2)
+            lineE.BackgroundColor3 = col; lineE.Size = UDim2.new(0, ln, 0, th)
+            lineE.Position = UDim2.new(0.5, 2, 0.5, -th/2)
+            lineW.BackgroundColor3 = col; lineW.Size = UDim2.new(0, ln, 0, th)
+            lineW.Position = UDim2.new(0.5, -ln - 2, 0.5, -th/2)
+            dot.BackgroundColor3 = sp.dot_color
+            dot.Visible = sp.center_dot
+            dot.Size = UDim2.new(0, sp.dot_size, 0, sp.dot_size)
+        end)
+
+        -- ============== HUD ==============
+        local hudSec = UI.createSection(miscTab, "HUD", "right")
+        -- Win Streak counter
+        local wsFrame = Instance.new("Frame"); wsFrame.Size = UDim2.new(0, 120, 0, 40)
+        wsFrame.Position = UDim2.new(1, -130, 0, 10); wsFrame.BackgroundTransparency = 1
+        wsFrame.Visible = false; wsFrame.Parent = screenGui
+        local wsLabel = Instance.new("TextLabel"); wsLabel.Size = UDim2.new(1,0,1,0)
+        wsLabel.BackgroundTransparency = 1; wsLabel.TextColor3 = sp.streak_color
+        wsLabel.TextStrokeTransparency = 0; wsLabel.TextScaled = true
+        wsLabel.Font = Enum.Font.GothamBlack; wsLabel.Text = "WIN STREAK: 0"
+        wsLabel.Parent = wsFrame
+        UI.addToggle(hudSec, "Win Streak Counter", false, function(v) sp.win_streak_enabled = v; wsFrame.Visible = v end)
+        UI.addSlider(hudSec, "Streak", 0, 999, 0, false, function(v) sp.win_streak = v; wsLabel.Text = "WIN STREAK: " .. v end)
+        UI.addColorPicker(hudSec, "Streak Color", sp.streak_color, function(c)
+            sp.streak_color = c; wsLabel.TextColor3 = c
+        end)
+        -- Hitmarker pulse
+        UI.addToggle(hudSec, "Hitmarker Pulse", false, function(v) sp.hit_pulse_enabled = v end)
+        UI.addSlider(hudSec, "Pulse Size", 10, 100, 40, true, function(v) sp.hit_pulse_size = v end)
+        UI.addColorPicker(hudSec, "Pulse Color", sp.hit_pulse_color, function(c) sp.hit_pulse_color = c end)
+        local function fireHitmarker()
+            if not sp.hit_pulse_enabled then return end
+            local f = Instance.new("Frame"); f.AnchorPoint = Vector2.new(0.5,0.5)
+            f.Position = UDim2.new(0.5, 0, 0.5, 0); f.BackgroundTransparency = 1
+            f.BorderSizePixel = 0; f.Size = UDim2.new(0, 0, 0, 0); f.Parent = crossGui
+            local function pulse(dx, dy)
+                local l = Instance.new("Frame"); l.BackgroundColor3 = sp.hit_pulse_color
+                l.BorderSizePixel = 0; l.AnchorPoint = Vector2.new(0.5,0.5)
+                l.Position = UDim2.new(0.5, dx, 0.5, dy); l.Size = UDim2.new(0, 2, 0, sp.hit_pulse_size * 0.3)
+                l.Rotation = math.deg(math.atan2(dy, dx)) + 90; l.Parent = f
+                Tween_SP:Create(l, TweenInfo.new(0.35, Enum.EasingStyle.Quad), { BackgroundTransparency = 1 }):Play()
+            end
+            local s = sp.hit_pulse_size * 0.5
+            pulse(-s, -s); pulse(s, -s); pulse(-s, s); pulse(s, s)
+            Debris_SP:AddItem(f, 0.4)
+        end
+        getgenv()._kami_FireHitmarker = fireHitmarker
+        -- Auto-fire hitmarker on enemy damage
+        local function bindHM(plr)
+            local function bch(char)
+                local hum = char:WaitForChild("Humanoid", 5); if not hum then return end
+                local last = hum.Health
+                hum:GetPropertyChangedSignal("Health"):Connect(function()
+                    local new = hum.Health
+                    if new < last - 0.05 and isEnemy(plr) then fireHitmarker() end
+                    last = new
+                end)
+            end
+            if plr.Character then bch(plr.Character) end
+            plr.CharacterAdded:Connect(bch)
+        end
+        for _, p in ipairs(Players_SP:GetPlayers()) do bindHM(p) end
+        Players_SP.PlayerAdded:Connect(bindHM)
+
+        -- HUD scale
+        UI.addSlider(hudSec, "HUD Scale", 0.5, 2.0, 1.0, true, function(v)
+            sp.hud_scale = v
+            for _, g in ipairs(playerGui:GetChildren()) do
+                if g:IsA("ScreenGui") and g.Name ~= "KamidereUI" and g.Name ~= "KamiCrosshair" then
+                    for _, c in ipairs(g:GetChildren()) do
+                        if c:IsA("Frame") then pcall(function()
+                            local scaler = c:FindFirstChild("_KamiScale") or Instance.new("UIScale")
+                            scaler.Name = "_KamiScale"; scaler.Scale = v; scaler.Parent = c
+                        end) end
+                    end
+                end
+            end
+        end)
+
+        -- FOV visualizer
+        local fovGui = Instance.new("ScreenGui"); fovGui.Name = "KamiFOV"
+        fovGui.IgnoreGuiInset = true; fovGui.DisplayOrder = 40
+        fovGui.ResetOnSpawn = false; fovGui.Parent = playerGui
+        local fovCircle = Instance.new("Frame"); fovCircle.BackgroundTransparency = 0.8
+        fovCircle.BackgroundColor3 = Color3.fromRGB(255, 220, 90)
+        fovCircle.BorderSizePixel = 0; fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+        fovCircle.Position = UDim2.new(0.5, 0, 0.5, 0); fovCircle.Parent = fovGui
+        local fc = Instance.new("UICorner"); fc.CornerRadius = UDim.new(1, 0); fc.Parent = fovCircle
+        fovGui.Enabled = false
+        UI.addToggle(hudSec, "Visualise FOV", false, function(v)
+            sp.fov_vis = v; fovGui.Enabled = v
+        end)
+        UI.addToggle(hudSec, "Filled FOV", false, function(v)
+            sp.fov_filled = v
+            fovCircle.BackgroundTransparency = v and 0.7 or 1
+        end)
+        UI.addSlider(hudSec, "FOV Radius", 10, 500, 150, true, function(v)
+            sp.fov_radius = v
+            fovCircle.Size = UDim2.new(0, v * 2, 0, v * 2)
+        end)
+        fovCircle.Size = UDim2.new(0, sp.fov_radius * 2, 0, sp.fov_radius * 2)
+
+        -- ============== Rage Sahur ==============
+        local sahurSec = UI.createSection(miscTab, "Rage Sahur / Utility", "right")
+        local sahur = Instance.new("Sound")
+        sahur.SoundId = "rbxassetid://129784036568948" -- tralalero tralala / sahur mod
+        sahur.Looped = true; sahur.Volume = 1.0; sahur.Parent = workspace
+        UI.addToggle(sahurSec, "Rage Sahur Music", false, function(v)
+            sp.rage_sahur_enabled = v
+            if v then sahur:Play() else sahur:Stop() end
+        end)
+        UI.addSlider(sahurSec, "Sahur Volume", 0, 5, 1, true, function(v)
+            sahur.Volume = v
+        end)
+
+        -- ============== Unload Cheat ==============
+        UI.addButton(sahurSec, "Unload Cheat", function()
+            pcall(function()
+                for _, g in ipairs(playerGui:GetChildren()) do
+                    if g:IsA("ScreenGui") and (g.Name == "KamidereUI" or g.Name == "KamiCrosshair" or g.Name == "KamiFOV" or g.Name == "KamiderePopup") then
+                        g:Destroy()
+                    end
+                end
+                if sahur.Parent then sahur:Destroy() end
+                local control = getgenv()["kamidere - Cracked"] or getgenv()["Unnamed Enhancements - Cracked"]
+                if control then control.stopped = true end
+                getgenv().UE_LOADED = nil
+                print("[kamidere] UNLOADED")
+            end)
+        end)
+
+        print("[kamidere] addon: sleepy-port section built")
+        end) -- pcall
+        if not __ok then warn("[kamidere] SLEEPY PORT ERROR: " .. tostring(__err)) end
     end)
 
     -- ============================================================
