@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-07.r18"
+    local KAMI_BUILD = "2026-11-07.r19"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -492812,17 +492812,13 @@ end)
 
         -- ============== HvH / Anti-aim ==============
         local hvhSec = UI.createSection(miscTab, "HvH / Anti-Aim", "left")
-        UI.addToggle(hvhSec, "Fake Position (shim)", false, function(v) sp.fake_pos_enabled = v end)
-        UI.addSlider(hvhSec, "Fake Pos Offset", 1, 30, 5, true, function(v) sp.fake_pos_offset = v end)
         UI.addToggle(hvhSec, "Jitter", false, function(v) sp.jitter_enabled = v end)
         UI.addSlider(hvhSec, "Jitter Speed", 1, 60, 10, true, function(v) sp.jitter_speed = v end)
         UI.addToggle(hvhSec, "Spinbot", false, function(v) sp.spinbot_enabled = v end)
         UI.addSlider(hvhSec, "Spin Yaw Speed", 1, 60, 8, true, function(v) sp.spinbot_yaw = v end)
-        UI.addToggle(hvhSec, "Zero Pitch", false, function(v) sp.zero_pitch = v end)
         UI.addToggle(hvhSec, "Backward Look", false, function(v) sp.backward_look = v end)
         UI.addToggle(hvhSec, "Static Rotation", false, function(v) sp.static_rot_enabled = v end)
         UI.addSlider(hvhSec, "Static Angle", -180, 180, 180, true, function(v) sp.static_rot_angle = v end)
-        UI.addToggle(hvhSec, "Hide Head Angle", false, function(v) sp.hide_head_angle = v end)
         UI.addToggle(hvhSec, "Voidspam Desync", false, function(v) sp.voidspam_enabled = v end)
         UI.addSlider(hvhSec, "Voidspam Depth", 10, 200, 50, true, function(v) sp.voidspam_depth = v end)
 
@@ -492869,13 +492865,9 @@ end)
         local movSec = UI.createSection(miscTab, "Movement / Exploits", "left")
         UI.addToggle(movSec, "Walk Speed Multiplier", false, function(v) sp.walk_mul_enabled = v end)
         UI.addSlider(movSec, "Walk Mul", 1, 10, 1.5, true, function(v) sp.walk_mul = v end)
-        UI.addToggle(movSec, "Flight Speed Override", false, function(v) sp.flight_speed_enabled = v end)
-        UI.addSlider(movSec, "Flight Speed", 10, 500, 50, true, function(v) sp.flight_speed = v end)
         UI.addToggle(movSec, "Infinite Double Jumps", false, function(v) sp.inf_jumps_enabled = v end)
-        UI.addToggle(movSec, "Preserve Movement Direction", false, function(v) sp.preserve_dir = v end)
         UI.addToggle(movSec, "Auto Noclip Underground", false, function(v) sp.auto_noclip = v end)
         UI.addSlider(movSec, "Underground Depth", 5, 100, 20, true, function(v) sp.underground_depth = v end)
-        UI.addToggle(movSec, "Lag Mode (shim)", false, function(v) sp.lag_mode = v end)
         UI.addButton(movSec, "Void Teleport", function()
             local char = LP_SP.Character; local hrp = char and char:FindFirstChild("HumanoidRootPart")
             if hrp then hrp.CFrame = hrp.CFrame + Vector3.new(0, -500, 0) end
@@ -492936,9 +492928,6 @@ end)
 
         -- ============== Target Priority ==============
         local prioSec = UI.createSection(miscTab, "Target Priority", "left")
-        UI.addToggle(prioSec, "Smart Lowest HP", false, function(v) sp.smart_lowest_hp = v end)
-        UI.addSlider(prioSec, "Hit Chance", 0, 100, 100, false, function(v) sp.hit_chance = v end)
-        UI.addSlider(prioSec, "Reaction Delay ms", 0, 500, 0, false, function(v) sp.reaction_delay = v end)
         UI.addTextBox(prioSec, "Priority: add player name", function(s)
             if s and s ~= "" then sp.priority_list[nameKey(s)] = true end
         end)
