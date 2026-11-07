@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-07.r30"
+    local KAMI_BUILD = "2026-11-07.r31"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -493631,6 +493631,62 @@ end)
         UI.addSlider(spoofSec, "Level Value", 0, 9999, 999, false, function(v) sp.spoof_level_value = v end)
         UI.addToggle(spoofSec, "Spoof Rank", false, function(v) sp.spoof_rank_enabled = v end)
         UI.addDropdown(spoofSec, "Rank Value", RANK_OPTIONS, "Archnemesis", function(v) sp.spoof_rank_value = v end)
+
+        -- ---- Headless ----
+        sp.headless = false
+        local HEADLESS_SAVED = {} -- part -> original LocalTransparencyModifier
+        local function applyHeadless(char)
+            if not sp.headless then return end
+            if not char then return end
+            local head = char:FindFirstChild("Head")
+            if head and head:IsA("BasePart") then
+                if HEADLESS_SAVED[head] == nil then HEADLESS_SAVED[head] = head.LocalTransparencyModifier end
+                pcall(function() head.LocalTransparencyModifier = 1 end)
+                -- also hide any face decals / meshes on the head
+                for _, d in ipairs(head:GetChildren()) do
+                    if d:IsA("Decal") or d:IsA("Texture") then
+                        pcall(function() d.Transparency = 1 end)
+                    end
+                end
+            end
+            -- hide hair/face accessories so headless actually looks headless
+            for _, acc in ipairs(char:GetChildren()) do
+                if acc:IsA("Accessory") then
+                    local handle = acc:FindFirstChild("Handle")
+                    if handle and handle:IsA("BasePart") then
+                        local n = acc.Name:lower()
+                        if n:find("hair") or n:find("hat") or n:find("face") or n:find("head") then
+                            if HEADLESS_SAVED[handle] == nil then HEADLESS_SAVED[handle] = handle.LocalTransparencyModifier end
+                            pcall(function() handle.LocalTransparencyModifier = 1 end)
+                        end
+                    end
+                end
+            end
+        end
+        local function restoreHead()
+            for part, orig in pairs(HEADLESS_SAVED) do
+                pcall(function() part.LocalTransparencyModifier = orig end)
+            end
+            HEADLESS_SAVED = {}
+        end
+        UI.addToggle(spoofSec, "Headless", false, function(v)
+            sp.headless = v
+            if v then applyHeadless(LP_SP.Character) else restoreHead() end
+        end)
+        -- Re-apply on respawn
+        LP_SP.CharacterAdded:Connect(function(c)
+            task.wait(0.3)  -- let the character fully build
+            if sp.headless then applyHeadless(c) end
+        end)
+        -- Catch late-arriving accessories (hats loaded after character spawn)
+        task.spawn(function()
+            while playerGui.Parent do
+                task.wait(1)
+                if sp.headless and LP_SP.Character then
+                    pcall(applyHeadless, LP_SP.Character)
+                end
+            end
+        end)
         UI.addToggle(spoofSec, "Spoofer Debug Log", false, function(v) sp.spoof_debug = v end)
         UI.addButton(spoofSec, "Dump All HUD Labels", function()
             print("[kamidere] === PlayerGui TextLabel dump ===")
