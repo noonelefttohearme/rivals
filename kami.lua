@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-07.r29"
+    local KAMI_BUILD = "2026-11-07.r30"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -492343,7 +492343,7 @@ end)
             "Hyperhit", "Tf2 Hit", "Deep Bass", "Glass", "Ding",
         }
         local SOUND_IDS = {
-            ["Bonk"]           = "rbxassetid://3932415659",   -- replaced auth-locked 6826617738
+            ["Bonk"]           = "rbxassetid://5543191254",   -- 3932415659 also dead; falling back to Oof's working id (override via Custom Sound ID)
             ["Oof"]            = "rbxassetid://5543191254",
             ["Minecraft"]      = "rbxassetid://7384271040",
             ["Rust"]           = "rbxassetid://6541725837",
@@ -492663,6 +492663,141 @@ end)
     end)
 
     -- ============================================================
+    -- [KILL SOUNDS] - plays when YOU get an elimination
+    -- Fires when an enemy's Humanoid.Health drops to 0 within a short
+    -- window after you raycast-hit them (so it attributes the kill to
+    -- you, not teammates).
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: kill-sounds starting")
+        task.wait(3)
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
+        local Players_KS = game:GetService("Players")
+        local LP_KS = Players_KS.LocalPlayer
+        local SoundSvc_KS = game:GetService("SoundService")
+        local Debris_KS = game:GetService("Debris")
+
+        local KILL_SOUNDS_ORDER = {
+            "Headshot Ding", "CS Headshot", "Quake Humiliation", "Valorant Kill",
+            "Clean Kill", "Minecraft XP", "Fortnite Death", "Kirby Pop",
+            "Deep Bass Hit", "Vine Boom", "Metal Pipe", "Discord Ping",
+        }
+        local KILL_SOUND_IDS = {
+            ["Headshot Ding"]      = "rbxassetid://7302080645",
+            ["CS Headshot"]        = "rbxassetid://7384271040",
+            ["Quake Humiliation"]  = "rbxassetid://611403141",
+            ["Valorant Kill"]      = "rbxassetid://5215929020",
+            ["Clean Kill"]         = "rbxassetid://6563101997",
+            ["Minecraft XP"]       = "rbxassetid://7384271040",
+            ["Fortnite Death"]     = "rbxassetid://9064782034",
+            ["Kirby Pop"]          = "rbxassetid://6563101997",
+            ["Deep Bass Hit"]      = "rbxassetid://180083194",
+            ["Vine Boom"]          = "rbxassetid://5153947961",
+            ["Metal Pipe"]         = "rbxassetid://5478359253",
+            ["Discord Ping"]       = "rbxassetid://5162226106",
+        }
+
+        local ks = {
+            enabled    = false,
+            name       = "Headshot Ding",
+            volume     = 1.0,
+            only_mine  = true,  -- only play on kills we caused
+        }
+        local KS_DEAD = {}
+        local kslast = 0
+
+        local function isEnemyKS(plr)
+            if plr == LP_KS then return false end
+            if plr.Team and LP_KS.Team and plr.Team == LP_KS.Team then return false end
+            return true
+        end
+
+        -- Reuse the FD hit tracker if it set one up (globally callable).
+        -- Otherwise local raycast tracker.
+        local MY_RECENT = {}
+        UserInputService.InputBegan:Connect(function(input, gp)
+            if gp then return end
+            if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+            local cam = workspace.CurrentCamera; if not cam then return end
+            local params = RaycastParams.new()
+            params.FilterDescendantsInstances = { LP_KS.Character or Instance.new("Model") }
+            params.FilterType = Enum.RaycastFilterType.Exclude
+            local rc = workspace:Raycast(cam.CFrame.Position, cam.CFrame.LookVector * 500, params)
+            if rc and rc.Instance then
+                local plr = Players_KS:GetPlayerFromCharacter(rc.Instance.Parent)
+                if plr then MY_RECENT[plr] = tick() end
+            end
+        end)
+        local function iHit(plr)
+            local t = MY_RECENT[plr]
+            return t and (tick() - t < 1.5)  -- 1.5s window for kill credit
+        end
+
+        local function playKillSound()
+            local now = tick()
+            if now - kslast < 0.15 then return end
+            kslast = now
+            local id = KILL_SOUND_IDS[ks.name]
+            if not id or KS_DEAD[id] then return end
+            local s = Instance.new("Sound")
+            s.SoundId = id; s.Volume = ks.volume
+            s.Parent = SoundSvc_KS
+            s:Play()
+            task.spawn(function()
+                task.wait(1.0)
+                if s.Parent and not s.IsLoaded then
+                    KS_DEAD[id] = true
+                    warn("[kamidere] kill sound DEAD, blacklisted: " .. id)
+                    pcall(function() s:Destroy() end)
+                end
+            end)
+            s.Ended:Connect(function() if s.Parent then s:Destroy() end end)
+            Debris_KS:AddItem(s, 10)
+        end
+
+        local function bindCharKS(plr, char)
+            local hum = char:WaitForChild("Humanoid", 5); if not hum then return end
+            local last = hum.Health
+            hum:GetPropertyChangedSignal("Health"):Connect(function()
+                local new = hum.Health
+                if ks.enabled and last > 0 and new <= 0 and isEnemyKS(plr) then
+                    if (not ks.only_mine) or iHit(plr) then
+                        playKillSound()
+                    end
+                end
+                last = new
+            end)
+        end
+        local function bindPlrKS(plr)
+            if plr.Character then task.spawn(bindCharKS, plr, plr.Character) end
+            plr.CharacterAdded:Connect(function(c) task.spawn(bindCharKS, plr, c) end)
+        end
+        for _, p in ipairs(Players_KS:GetPlayers()) do bindPlrKS(p) end
+        Players_KS.PlayerAdded:Connect(bindPlrKS)
+
+        local ksSec = UI.createSection(miscTab, "Kill Sounds", "right")
+        UI.addToggle(ksSec, "Kill Sound Enabled", false, function(v) ks.enabled = v end)
+        UI.addDropdown(ksSec, "Kill Sound", KILL_SOUNDS_ORDER, "Headshot Ding", function(v) ks.name = v end)
+        UI.addSlider(ksSec, "Kill Volume", 0, 5, 1, true, function(v) ks.volume = v end)
+        UI.addToggle(ksSec, "Only My Kills", true, function(v) ks.only_mine = v end)
+        UI.addButton(ksSec, "Preview Kill Sound", function() playKillSound() end)
+        UI.addTextBox(ksSec, "Custom Kill Sound ID", function(s)
+            local id = (s or ""):gsub("%D", "")
+            if id ~= "" then
+                KILL_SOUND_IDS[ks.name] = "rbxassetid://" .. id
+                KS_DEAD["rbxassetid://" .. id] = nil
+                print(("[kamidere] kill sound '%s' override -> rbxassetid://%s"):format(ks.name, id))
+            end
+        end)
+
+        print("[kamidere] addon: kill-sounds section built")
+        end) -- pcall
+        if not __ok then warn("[kamidere] KILL SOUNDS ERROR: " .. tostring(__err)) end
+    end)
+
+    -- ============================================================
     -- [FORTNITE DAMAGE NUMBERS] - standalone, not from UE
     -- Hooks every enemy Humanoid's Health. On a damage drop > 0,
     -- spawns a blue drop-shadowed billboard number at the enemy's
@@ -492682,12 +492817,39 @@ end)
         local Debris_FD = game:GetService("Debris")
         local LP_FD = Players_FD.LocalPlayer
 
-        local fd = { enabled = false, team_check = true }
+        local fd = { enabled = false, team_check = false, only_my_hits = true }
+
+        -- Track which player my raycast landed on most recently.
+        -- If an enemy's health drops within ~0.4s of that raycast,
+        -- we attribute the damage to the local player.
+        local LAST_MY_HIT = {}  -- Player -> tick() timestamp
+        local function markHit(plr)
+            if plr and plr ~= LP_FD then LAST_MY_HIT[plr] = tick() end
+        end
+        UserInputService.InputBegan:Connect(function(input, gp)
+            if gp or not fd.enabled then return end
+            if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+            local cam = workspace.CurrentCamera; if not cam then return end
+            local origin = cam.CFrame.Position
+            local dir = cam.CFrame.LookVector * 500
+            local params = RaycastParams.new()
+            params.FilterDescendantsInstances = { LP_FD.Character or Instance.new("Model") }
+            params.FilterType = Enum.RaycastFilterType.Exclude
+            local rc = workspace:Raycast(origin, dir, params)
+            if rc and rc.Instance then
+                local plr = Players_FD:GetPlayerFromCharacter(rc.Instance.Parent)
+                if plr then markHit(plr) end
+            end
+        end)
 
         local function isEnemy(plr)
             if plr == LP_FD then return false end
             if plr.Team and LP_FD.Team and plr.Team == LP_FD.Team then return false end
             return true
+        end
+        local function iCaused(plr)
+            local t = LAST_MY_HIT[plr]
+            return t and (tick() - t < 0.4)
         end
 
         local function showNumber(cf, amount)
@@ -492751,7 +492913,9 @@ end)
                 local new = hum.Health
                 local delta = last - new
                 if fd.enabled and new > 0 and delta > 0.5 then
-                    if not fd.team_check or isEnemy(plr) then
+                    local passTeam = (not fd.team_check) or isEnemy(plr)
+                    local passMine = (not fd.only_my_hits) or iCaused(plr)
+                    if passTeam and passMine then
                         pcall(showNumber, root.CFrame, delta)
                     end
                 end
@@ -492767,12 +492931,10 @@ end)
         for _, plr in ipairs(Players_FD:GetPlayers()) do bindPlr(plr) end
         Players_FD.PlayerAdded:Connect(bindPlr)
 
-        -- Default team_check to false so numbers show on EVERY player
-        -- taking damage, not just enemies. Operator can flip it on.
-        fd.team_check = false
         -- UI
         local fdSec = UI.createSection(miscTab, "Fortnite Damage", "right")
         UI.addToggle(fdSec, "Damage Numbers", false, function(v) fd.enabled = v end)
+        UI.addToggle(fdSec, "Only My Hits", true, function(v) fd.only_my_hits = v end)
         UI.addToggle(fdSec, "Only Enemies", false, function(v) fd.team_check = v end)
         UI.addButton(fdSec, "Test Number", function()
             local char = LP_FD.Character
@@ -493151,8 +493313,12 @@ end)
         brand.TextColor3 = Color3.fromRGB(255, 215, 90)
         brand.TextStrokeTransparency = 0
         brand.TextStrokeColor3 = Color3.new(0, 0, 0)
-        brand.TextSize = 13
-        brand.Font = Enum.Font.GothamBold
+        brand.TextSize = 14
+        -- Match the kami menu's own pixel font (Monocraft via UI_FONT) so
+        -- the watermark reads identically to the title bar / sections.
+        -- Fallback: PressStart2P which is a baked-in roblox pixel font.
+        brand.Font = Enum.Font.Code
+        if UI_FONT then pcall(function() brand.FontFace = UI_FONT end) end
         brand.Parent = crossRoot
 
         sp.cross_spin = false
@@ -493164,7 +493330,7 @@ end)
         UI.addSlider(crossSec, "Rainbow Speed", 0.1, 5, 1, true, function(v) sp.cross_speed = v end)
         UI.addToggle(crossSec, "Spin", false, function(v) sp.cross_spin = v end)
         UI.addSlider(crossSec, "Spin Speed deg/s", 10, 720, 180, true, function(v) sp.cross_spin_speed = v end)
-        UI.addToggle(crossSec, "Show kami.wtf", true, function(v)
+        UI.addToggle(crossSec, "Watermark", true, function(v)
             sp.cross_brand_show = v; brand.Visible = v
         end)
         UI.addSlider(crossSec, "Length", 1, 30, 10, true, function(v) sp.cross_length = v end)
