@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-07.r28"
+    local KAMI_BUILD = "2026-11-07.r29"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -492343,7 +492343,7 @@ end)
             "Hyperhit", "Tf2 Hit", "Deep Bass", "Glass", "Ding",
         }
         local SOUND_IDS = {
-            ["Bonk"]           = "rbxassetid://6826617738",
+            ["Bonk"]           = "rbxassetid://3932415659",   -- replaced auth-locked 6826617738
             ["Oof"]            = "rbxassetid://5543191254",
             ["Minecraft"]      = "rbxassetid://7384271040",
             ["Rust"]           = "rbxassetid://6541725837",
@@ -492358,7 +492358,7 @@ end)
             ["Fortnite Death"] = "rbxassetid://9064782034",   -- replaced dead 5478360068 (wrong asset type)
             ["Osu Hit"]        = "rbxassetid://5215929020",
             ["Kirby"]          = "rbxassetid://6563101997",
-            ["Hyperhit"]       = "rbxassetid://9068897577",
+            ["Hyperhit"]       = "rbxassetid://1483030167",   -- replaced wrong-type 9068897577
             ["Tf2 Hit"]        = "rbxassetid://611403141",
             ["Deep Bass"]      = "rbxassetid://180083194",
             ["Glass"]          = "rbxassetid://5174219111",
@@ -493312,18 +493312,27 @@ end)
         -- get caught.
         local SPOOF_PATTERNS = {
             winstreak = {
-                name_re = "[Ww]in[Ss]treak|[Ss]treak|wins",
-                text_re = "^Streak:?%s*%d+$|^Win%s*Streak:?%s*%d+$|^%d+$",
+                name_re = "[Ww]in[Ss]treak|[Ss]treak|[Ww]ins|[Cc]ount|[Kk]ills",
             },
             level = {
-                name_re = "[Ll]evel|LvL|[Ee]xperience",
-                text_re = "^Lv%.?%s*%d+$|^Level%s*%d+$|^LVL%s*%d+$|^%d+$",
+                name_re = "[Ll]evel|LvL|[Ee]xperience|[Xx][Pp]|[Rr]eputation",
             },
             rank = {
-                name_re = "[Rr]ank[^P]|RankName|RankLabel|RankText",
-                text_re = ".+",
+                name_re = "[Rr]ank|[Tt]ier|[Dd]ivision|[Ss]kill|[Ee][Ll][Oo]|[Rr]ating",
             },
         }
+
+        -- Real Rivals rank display strings (and their Roman-numeral suffixes)
+        -- so we can text-match against whatever the game's current rank
+        -- label contains, independent of what the label is named.
+        local RANK_TIERS   = { "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Onyx", "Nemesis", "Archnemesis" }
+        local function textLooksLikeRank(t)
+            if type(t) ~= "string" then return false end
+            for _, tier in ipairs(RANK_TIERS) do
+                if t:find(tier) then return true end
+            end
+            return false
+        end
         -- Real Rivals ladder (23 ranks). ELO thresholds kept as data in
         -- case we need them later for auto-rank-text that matches a
         -- spoofed ELO value.
@@ -493380,40 +493389,99 @@ end)
             ["Archnemesis"]    = "rbxassetid://17421670089",
         }
 
+        -- A TextLabel is a win-streak candidate if its name contains
+        -- streak/win/kills OR its sibling TextLabel in the same Frame
+        -- contains the word "Streak" / "Wins" and this label's text is
+        -- a plain number.
+        local function isNumericText(s) return type(s) == "string" and s:match("^%s*%d+%s*$") ~= nil end
+        local function anySiblingHasText(frame, patterns)
+            if not frame then return false end
+            for _, c in ipairs(frame:GetChildren()) do
+                if c:IsA("TextLabel") then
+                    local t = tostring(c.Text or "")
+                    for _, p in ipairs(patterns) do
+                        if t:lower():find(p) then return true end
+                    end
+                end
+            end
+            return false
+        end
+
         local function applySpoofs()
             if not (sp.spoof_winstreak_enabled or sp.spoof_level_enabled or sp.spoof_rank_enabled) then return end
+            local hits = { ws = 0, lv = 0, rk = 0, badge = 0 }
             for _, gui in ipairs(playerGui:GetChildren()) do
-                if gui:IsA("ScreenGui") and gui.Name ~= "KamidereUI" and gui.Name ~= "KamiCrosshair" and gui.Name ~= "KamiFOV" and gui.Name ~= "KamidereCursor" and gui.Name ~= "KamidereKeybinds" then
+                local skip = gui:IsA("ScreenGui") and (
+                    gui.Name == "KamidereUI" or gui.Name == "KamiCrosshair" or
+                    gui.Name == "KamiFOV" or gui.Name == "KamidereCursor" or
+                    gui.Name == "KamidereKeybinds")
+                if gui:IsA("ScreenGui") and not skip then
                     for _, d in ipairs(gui:GetDescendants()) do
                         if d:IsA("TextLabel") then
                             local n = d.Name
-                            if sp.spoof_winstreak_enabled and nameMatches(n, SPOOF_PATTERNS.winstreak.name_re) then
+                            local t = tostring(d.Text or "")
+                            -- RANK: match by text content (any rank tier
+                            -- word already in the label's text) OR by name
+                            if sp.spoof_rank_enabled and (textLooksLikeRank(t) or nameMatches(n, SPOOF_PATTERNS.rank.name_re)) then
+                                pcall(function() d.Text = tostring(sp.spoof_rank_value) end)
+                                hits.rk = hits.rk + 1
+                            -- WIN STREAK: name match OR numeric text whose
+                            -- parent has a sibling label containing "streak"/"win"
+                            elseif sp.spoof_winstreak_enabled and (
+                                nameMatches(n, SPOOF_PATTERNS.winstreak.name_re)
+                                or (isNumericText(t) and anySiblingHasText(d.Parent, { "streak", "win", "wins" }))
+                            ) then
                                 pcall(function() d.Text = tostring(sp.spoof_winstreak_value) end)
+                                hits.ws = hits.ws + 1
+                            -- LEVEL
                             elseif sp.spoof_level_enabled and nameMatches(n, SPOOF_PATTERNS.level.name_re) then
                                 pcall(function() d.Text = "Lv. " .. tostring(sp.spoof_level_value) end)
-                            elseif sp.spoof_rank_enabled and nameMatches(n, SPOOF_PATTERNS.rank.name_re) then
-                                pcall(function() d.Text = tostring(sp.spoof_rank_value) end)
+                                hits.lv = hits.lv + 1
                             end
                         elseif d:IsA("ImageLabel") then
                             if sp.spoof_rank_enabled then
                                 local n = d.Name:lower()
-                                if n:find("rank") or n:find("badge") or n:find("crest") then
+                                if n:find("rank") or n:find("badge") or n:find("crest") or n:find("tier") then
                                     local bid = RANK_BADGE_IDS[sp.spoof_rank_value]
-                                    if bid then pcall(function() d.Image = bid end) end
+                                    if bid then
+                                        pcall(function() d.Image = bid end)
+                                        hits.badge = hits.badge + 1
+                                    end
                                 end
                             end
                         end
                     end
                 end
             end
+            if sp.spoof_debug then
+                print(("[kamidere] spoofer hits ws=%d lv=%d rk=%d badge=%d"):format(hits.ws, hits.lv, hits.rk, hits.badge))
+            end
         end
 
+        sp.spoof_debug = false
         UI.addToggle(spoofSec, "Spoof Win Streak", false, function(v) sp.spoof_winstreak_enabled = v end)
         UI.addSlider(spoofSec, "Win Streak Value", 0, 9999, 999, false, function(v) sp.spoof_winstreak_value = v end)
         UI.addToggle(spoofSec, "Spoof Level", false, function(v) sp.spoof_level_enabled = v end)
         UI.addSlider(spoofSec, "Level Value", 0, 9999, 999, false, function(v) sp.spoof_level_value = v end)
         UI.addToggle(spoofSec, "Spoof Rank", false, function(v) sp.spoof_rank_enabled = v end)
         UI.addDropdown(spoofSec, "Rank Value", RANK_OPTIONS, "Archnemesis", function(v) sp.spoof_rank_value = v end)
+        UI.addToggle(spoofSec, "Spoofer Debug Log", false, function(v) sp.spoof_debug = v end)
+        UI.addButton(spoofSec, "Dump All HUD Labels", function()
+            print("[kamidere] === PlayerGui TextLabel dump ===")
+            for _, gui in ipairs(playerGui:GetChildren()) do
+                if gui:IsA("ScreenGui") and not gui.Name:find("Kami") then
+                    for _, d in ipairs(gui:GetDescendants()) do
+                        if d:IsA("TextLabel") then
+                            local t = tostring(d.Text or ""):sub(1, 40)
+                            print(("  [%s] name='%s' text='%s'"):format(gui.Name, d.Name, t))
+                        elseif d:IsA("ImageLabel") then
+                            print(("  [%s] IMG name='%s' id='%s'"):format(gui.Name, d.Name, tostring(d.Image)))
+                        end
+                    end
+                end
+            end
+            print("[kamidere] === end dump ===")
+        end)
 
         task.spawn(function()
             while playerGui.Parent do
