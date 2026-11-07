@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-07.r21"
+    local KAMI_BUILD = "2026-11-07.r22"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -493253,6 +493253,163 @@ end)
         print("[kamidere] addon: sleepy-port section built")
         end) -- pcall
         if not __ok then warn("[kamidere] SLEEPY PORT ERROR: " .. tostring(__err)) end
+    end)
+
+    -- ============================================================
+    -- [SEARCH BAR] - Global label filter across all tabs
+    -- Floating TextBox at the top of mainFrame. As you type, every
+    -- control row (Toggle_*, Slider_*, Dropdown_*, Button_*, etc)
+    -- whose Name doesn't contain the search text is hidden, along
+    -- with its parent Section if nothing inside it survived.
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: search-bar starting")
+        task.wait(2)
+
+        -- Search bar frame parented to mainFrame header area
+        local searchFrame = Instance.new("Frame")
+        searchFrame.Name = "SearchBar"
+        searchFrame.Size = UDim2.new(0, 180, 0, 22)
+        searchFrame.Position = UDim2.new(1, -200, 0, 12)
+        searchFrame.BackgroundColor3 = COLORS.DropdownBg
+        searchFrame.BorderSizePixel = 0
+        searchFrame.ZIndex = 20
+        searchFrame.Parent = mainFrame
+        local sc = Instance.new("UICorner"); sc.CornerRadius = UDim.new(0, 3); sc.Parent = searchFrame
+        local ss = Instance.new("UIStroke"); ss.Color = COLORS.DropdownBorder; ss.Thickness = 1; ss.Parent = searchFrame
+
+        local icon = Instance.new("TextLabel")
+        icon.Size = UDim2.new(0, 18, 1, 0)
+        icon.Position = UDim2.new(0, 2, 0, 0)
+        icon.BackgroundTransparency = 1
+        icon.Text = "/"
+        icon.TextColor3 = COLORS.AccentGlow
+        icon.TextSize = 12
+        if UI_FONT then pcall(function() icon.FontFace = UI_FONT end) end
+        icon.ZIndex = 21
+        icon.Parent = searchFrame
+
+        local box = Instance.new("TextBox")
+        box.Size = UDim2.new(1, -24, 1, -2)
+        box.Position = UDim2.new(0, 22, 0, 1)
+        box.BackgroundTransparency = 1
+        box.Text = ""
+        box.PlaceholderText = "search..."
+        box.TextColor3 = COLORS.TextPrimary
+        box.PlaceholderColor3 = COLORS.TextMuted
+        box.TextSize = 11
+        box.TextXAlignment = Enum.TextXAlignment.Left
+        box.ClearTextOnFocus = false
+        if UI_FONT then pcall(function() box.FontFace = UI_FONT end) end
+        box.ZIndex = 21
+        box.Parent = searchFrame
+
+        -- Which Frame Name prefixes count as a control row
+        local CONTROL_PREFIXES = {
+            "Toggle_", "Slider_", "Dropdown_", "ColorPicker_", "ColorGroup_",
+            "Keybind_", "Button_", "TextBox_", "Label_",
+        }
+        local function nameLooksLikeControl(nm)
+            for _, p in ipairs(CONTROL_PREFIXES) do
+                if nm:sub(1, #p) == p then return true, p end
+            end
+            return false
+        end
+        local function controlLabelOf(nm, prefix)
+            return nm:sub(#prefix + 1)
+        end
+
+        -- Walk the tab tree once to build a flat list of (sectionFrame, controlFrame, label)
+        -- so filtering is cheap on every keystroke.
+        local index = {} -- { {section, control, label}, ... }
+        local function harvest()
+            index = {}
+            for _, tab in ipairs(UI.tabs or {}) do
+                for _, col in ipairs({ tab.leftCol, tab.rightCol }) do
+                    if col then
+                        for _, sec in ipairs(col:GetChildren()) do
+                            if sec:IsA("Frame") and sec.Name:sub(1, 8) == "Section_" then
+                                local cardBox = sec:FindFirstChild("CardBox")
+                                local container = cardBox and cardBox:FindFirstChild("Container")
+                                if container then
+                                    for _, ctrl in ipairs(container:GetChildren()) do
+                                        if ctrl:IsA("Frame") or ctrl:IsA("TextButton") then
+                                            local ok, prefix = nameLooksLikeControl(ctrl.Name)
+                                            if ok then
+                                                table.insert(index, {
+                                                    section = sec,
+                                                    control = ctrl,
+                                                    label   = controlLabelOf(ctrl.Name, prefix):lower(),
+                                                })
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            print(("[kamidere] search: indexed %d controls"):format(#index))
+        end
+
+        local function applyFilter(query)
+            local q = (query or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+            local sectionHasMatch = {}
+            if q == "" then
+                -- Show everything
+                for _, e in ipairs(index) do
+                    e.control.Visible = true
+                    sectionHasMatch[e.section] = true
+                end
+            else
+                for _, e in ipairs(index) do
+                    local hit = e.label:find(q, 1, true) ~= nil
+                    e.control.Visible = hit
+                    if hit then sectionHasMatch[e.section] = true end
+                end
+            end
+            -- Hide sections with zero surviving controls
+            for _, e in ipairs(index) do
+                e.section.Visible = sectionHasMatch[e.section] == true
+            end
+        end
+
+        -- Build index after everything has had a chance to populate
+        task.wait(4)
+        harvest()
+
+        -- Re-harvest when new controls appear (addon late-builds) with
+        -- debounce so we don't rebuild per-child-added storm.
+        local reharvestPending = false
+        local function scheduleReharvest()
+            if reharvestPending then return end
+            reharvestPending = true
+            task.delay(0.5, function()
+                reharvestPending = false
+                harvest()
+                applyFilter(box.Text)
+            end)
+        end
+        for _, tab in ipairs(UI.tabs or {}) do
+            for _, col in ipairs({ tab.leftCol, tab.rightCol }) do
+                if col then
+                    col.ChildAdded:Connect(scheduleReharvest)
+                    col.DescendantAdded:Connect(function(d)
+                        if d:IsA("Frame") then scheduleReharvest() end
+                    end)
+                end
+            end
+        end
+
+        box:GetPropertyChangedSignal("Text"):Connect(function()
+            applyFilter(box.Text)
+        end)
+
+        print("[kamidere] addon: search-bar ready")
+        end) -- pcall
+        if not __ok then warn("[kamidere] SEARCH BAR ERROR: " .. tostring(__err)) end
     end)
 
     -- ============================================================
