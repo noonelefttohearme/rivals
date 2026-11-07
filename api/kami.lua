@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-07.r25"
+    local KAMI_BUILD = "2026-11-07.r26"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -492603,6 +492603,13 @@ end)
             local root = ch and ch:FindFirstChild("HumanoidRootPart")
             if root then playSound(root.CFrame) end
         end)
+        UI.addTextBox(sndSec, "Custom Sound ID (override)", function(s)
+            local id = (s or ""):gsub("%D", "")
+            if id ~= "" then
+                SOUND_IDS[hx.snd_name] = "rbxassetid://" .. id
+                print(("[kamidere] sound '%s' override -> rbxassetid://%s"):format(hx.snd_name, id))
+            end
+        end)
 
         -- ------------- HIT DETECTION -------------
         local function isEnemy(plr)
@@ -492678,12 +492685,18 @@ end)
             gui.LightInfluence = 0
             gui.Parent = p
 
+            -- Crit threshold: anything above 50 damage = blue crit. Normal
+            -- hits render in white.
+            local isCrit = amount >= 50
+            local normalColor = Color3.fromRGB(255, 255, 255)
+            local critColor   = Color3.fromRGB(80, 170, 255)
+
             local label = Instance.new("TextLabel")
             label.Size = UDim2.new(1, 0, 1, 0)
             label.BackgroundTransparency = 1
             label.Text = tostring(math.floor(amount + 0.5))
-            label.TextColor3 = Color3.fromRGB(80, 170, 255)
-            label.TextStrokeColor3 = Color3.fromRGB(0, 0, 40)
+            label.TextColor3 = isCrit and critColor or normalColor
+            label.TextStrokeColor3 = isCrit and Color3.fromRGB(0, 0, 40) or Color3.fromRGB(40, 40, 40)
             label.TextStrokeTransparency = 0
             label.Font = Enum.Font.FredokaOne
             label.TextScaled = false
@@ -492735,10 +492748,13 @@ end)
         for _, plr in ipairs(Players_FD:GetPlayers()) do bindPlr(plr) end
         Players_FD.PlayerAdded:Connect(bindPlr)
 
+        -- Default team_check to false so numbers show on EVERY player
+        -- taking damage, not just enemies. Operator can flip it on.
+        fd.team_check = false
         -- UI
         local fdSec = UI.createSection(miscTab, "Fortnite Damage", "right")
         UI.addToggle(fdSec, "Damage Numbers", false, function(v) fd.enabled = v end)
-        UI.addToggle(fdSec, "Only Enemies", true, function(v) fd.team_check = v end)
+        UI.addToggle(fdSec, "Only Enemies", false, function(v) fd.team_check = v end)
         UI.addButton(fdSec, "Test Number", function()
             local char = LP_FD.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -493088,18 +493104,50 @@ end)
         local crossGui = Instance.new("ScreenGui"); crossGui.Name = "KamiCrosshair"
         crossGui.IgnoreGuiInset = true; crossGui.DisplayOrder = 50
         crossGui.ResetOnSpawn = false; crossGui.Parent = playerGui
+        -- Outer root anchored to screen center, holds a rotatable inner frame
+        -- so Spin can rotate the entire crosshair cleanly.
         local crossRoot = Instance.new("Frame"); crossRoot.BackgroundTransparency = 1
         crossRoot.AnchorPoint = Vector2.new(0.5, 0.5)
         crossRoot.Position = UDim2.new(0.5, 0, 0.5, 0)
         crossRoot.Size = UDim2.new(0, 60, 0, 60); crossRoot.Parent = crossGui
-        local function mkLine(name) local l = Instance.new("Frame"); l.Name = name; l.BorderSizePixel = 0; l.Parent = crossRoot; return l end
+        local crossSpin = Instance.new("Frame"); crossSpin.Name = "Spinner"
+        crossSpin.AnchorPoint = Vector2.new(0.5, 0.5)
+        crossSpin.Position = UDim2.new(0.5, 0, 0.5, 0)
+        crossSpin.Size = UDim2.new(1, 0, 1, 0)
+        crossSpin.BackgroundTransparency = 1
+        crossSpin.Parent = crossRoot
+        local function mkLine(name) local l = Instance.new("Frame"); l.Name = name; l.BorderSizePixel = 0; l.Parent = crossSpin; return l end
         local lineN, lineS, lineE, lineW = mkLine("N"), mkLine("S"), mkLine("E"), mkLine("W")
         local dot = Instance.new("Frame"); dot.Name = "Dot"; dot.AnchorPoint = Vector2.new(0.5,0.5)
         dot.Position = UDim2.new(0.5, 0, 0.5, 0); dot.BorderSizePixel = 0; dot.Parent = crossRoot
 
+        -- "kami.wtf" label below the crosshair (not rotated with spin)
+        local brand = Instance.new("TextLabel")
+        brand.Name = "Brand"
+        brand.AnchorPoint = Vector2.new(0.5, 0)
+        brand.Position = UDim2.new(0.5, 0, 1, 10)
+        brand.Size = UDim2.new(0, 120, 0, 18)
+        brand.BackgroundTransparency = 1
+        brand.Text = "kami.wtf"
+        brand.TextColor3 = Color3.fromRGB(255, 215, 90)
+        brand.TextStrokeTransparency = 0
+        brand.TextStrokeColor3 = Color3.new(0, 0, 0)
+        brand.TextSize = 13
+        brand.Font = Enum.Font.GothamBold
+        brand.Parent = crossRoot
+
+        sp.cross_spin = false
+        sp.cross_spin_speed = 180  -- deg/sec
+        sp.cross_brand_show = true
+
         UI.addToggle(crossSec, "Custom Crosshair", false, function(v) sp.crosshair_enabled = v; crossGui.Enabled = v end)
         UI.addToggle(crossSec, "Rainbow", false, function(v) sp.cross_rainbow = v end)
         UI.addSlider(crossSec, "Rainbow Speed", 0.1, 5, 1, true, function(v) sp.cross_speed = v end)
+        UI.addToggle(crossSec, "Spin", false, function(v) sp.cross_spin = v end)
+        UI.addSlider(crossSec, "Spin Speed deg/s", 10, 720, 180, true, function(v) sp.cross_spin_speed = v end)
+        UI.addToggle(crossSec, "Show kami.wtf", true, function(v)
+            sp.cross_brand_show = v; brand.Visible = v
+        end)
         UI.addSlider(crossSec, "Length", 1, 30, 10, true, function(v) sp.cross_length = v end)
         UI.addSlider(crossSec, "Thickness", 1, 8, 2, true, function(v) sp.cross_thickness = v end)
         UI.addToggle(crossSec, "Outlines", true, function(v) sp.cross_outlines = v end)
@@ -493110,10 +493158,18 @@ end)
         UI.addColorPicker(crossSec, "Dot Color", sp.dot_color, function(c) sp.dot_color = c end)
 
         local huePhase = 0
+        local spinPhase = 0
         RunService.RenderStepped:Connect(function(dt)
             if not sp.crosshair_enabled then crossGui.Enabled = false; return end
             crossGui.Enabled = true
             huePhase = (huePhase + dt * sp.cross_speed * 0.3) % 1
+            if sp.cross_spin then
+                spinPhase = (spinPhase + dt * sp.cross_spin_speed) % 360
+                crossSpin.Rotation = spinPhase
+            else
+                crossSpin.Rotation = 0
+            end
+            brand.Visible = sp.cross_brand_show
             local col = sp.cross_rainbow and Color3.fromHSV(huePhase, 1, 1) or sp.cross_color
             local th = sp.cross_thickness; local ln = sp.cross_length
             lineN.BackgroundColor3 = col; lineN.Size = UDim2.new(0, th, 0, ln)
@@ -493221,89 +493277,88 @@ end)
         end)
         fovCircle.Size = UDim2.new(0, sp.fov_radius * 2, 0, sp.fov_radius * 2)
 
-        -- ============== Rage Sahur ==============
-        local sahurSec = UI.createSection(miscTab, "Rage Sahur / Utility", "right")
-        -- Known candidate Sahur / Italian brainrot audio IDs. Tried in order;
-        -- first one that successfully loads wins.
-        local SAHUR_CANDIDATES = {
-            "rbxassetid://114789716732411",  -- Tung Tung Tung Sahur loop
-            "rbxassetid://116533812541091",  -- Tung Tung Tung full
-            "rbxassetid://106749691816456",  -- Tralalero Tralala
-            "rbxassetid://129784036568948",  -- original attempt
-            "rbxassetid://137564319893257",  -- phonk sahur remix
-        }
-        local sahurSvc = game:GetService("SoundService")
-        local sahur = Instance.new("Sound")
-        sahur.Name = "KamiSahur"
-        sahur.Looped = true
-        sahur.Volume = 1.0
-        sahur.Parent = sahurSvc  -- global 2D audio - plays regardless of listener position
-        sahur.SoundId = SAHUR_CANDIDATES[1]
+        -- ============== Spoofers / Utility ==============
+        local spoofSec = UI.createSection(miscTab, "Spoofers / Utility", "right")
 
-        -- Try each candidate: wait briefly for load, if failed try the next.
-        local function trySahur(idx, onDone)
-            idx = idx or 1
-            if idx > #SAHUR_CANDIDATES then
-                warn("[kamidere] Rage Sahur: no candidate loaded")
-                if onDone then onDone(false) end
-                return
+        sp.spoof_winstreak_enabled = false
+        sp.spoof_winstreak_value   = 999
+        sp.spoof_level_enabled     = false
+        sp.spoof_level_value       = 999
+        sp.spoof_rank_enabled      = false
+        sp.spoof_rank_value        = "Nebula"
+
+        -- Walks PlayerGui for TextLabels whose Name/Text matches known
+        -- patterns and overwrites. Client-side only; other players still
+        -- see the real values. Fires every 0.25s so freshly spawned labels
+        -- get caught.
+        local SPOOF_PATTERNS = {
+            winstreak = {
+                name_re = "[Ww]in[Ss]treak|[Ss]treak|wins",
+                text_re = "^Streak:?%s*%d+$|^Win%s*Streak:?%s*%d+$|^%d+$",
+            },
+            level = {
+                name_re = "[Ll]evel|LvL|[Ee]xperience",
+                text_re = "^Lv%.?%s*%d+$|^Level%s*%d+$|^LVL%s*%d+$|^%d+$",
+            },
+            rank = {
+                name_re = "[Rr]ank[^P]|RankName|RankLabel|RankText",
+                text_re = ".+",
+            },
+        }
+        local RANK_OPTIONS = {
+            "Bronze", "Silver", "Gold", "Platinum", "Diamond",
+            "Master", "Grandmaster", "Nebula", "Celestial", "Mythic",
+        }
+
+        local function nameMatches(nm, pattern)
+            for alt in pattern:gmatch("[^|]+") do
+                if nm:match(alt) then return true end
             end
-            local id = SAHUR_CANDIDATES[idx]
-            sahur.SoundId = id
-            print("[kamidere] Rage Sahur: trying " .. id)
-            task.spawn(function()
-                task.wait(0.5)
-                if sahur.IsLoaded then
-                    print("[kamidere] Rage Sahur: loaded " .. id)
-                    if onDone then onDone(true) end
-                else
-                    print("[kamidere] Rage Sahur: dead " .. id)
-                    trySahur(idx + 1, onDone)
-                end
-            end)
+            return false
         end
 
-        -- Resolve a working id in the background so Play is instant later.
-        trySahur()
+        local function applySpoofs()
+            if not (sp.spoof_winstreak_enabled or sp.spoof_level_enabled or sp.spoof_rank_enabled) then return end
+            for _, gui in ipairs(playerGui:GetChildren()) do
+                if gui:IsA("ScreenGui") and gui.Name ~= "KamidereUI" and gui.Name ~= "KamiCrosshair" and gui.Name ~= "KamiFOV" and gui.Name ~= "KamidereCursor" and gui.Name ~= "KamidereKeybinds" then
+                    for _, d in ipairs(gui:GetDescendants()) do
+                        if d:IsA("TextLabel") then
+                            local n = d.Name
+                            if sp.spoof_winstreak_enabled and nameMatches(n, SPOOF_PATTERNS.winstreak.name_re) then
+                                pcall(function() d.Text = tostring(sp.spoof_winstreak_value) end)
+                            elseif sp.spoof_level_enabled and nameMatches(n, SPOOF_PATTERNS.level.name_re) then
+                                pcall(function() d.Text = "Lv. " .. tostring(sp.spoof_level_value) end)
+                            elseif sp.spoof_rank_enabled and nameMatches(n, SPOOF_PATTERNS.rank.name_re) then
+                                pcall(function() d.Text = tostring(sp.spoof_rank_value) end)
+                            end
+                        end
+                    end
+                end
+            end
+        end
 
-        UI.addToggle(sahurSec, "Rage Sahur Music", false, function(v)
-            sp.rage_sahur_enabled = v
-            if v then
-                pcall(function() sahur:Play() end)
-                print(("[kamidere] Rage Sahur: PLAY (id=%s vol=%.2f loaded=%s)"):format(
-                    sahur.SoundId, sahur.Volume, tostring(sahur.IsLoaded)))
-            else
-                pcall(function() sahur:Stop() end)
+        UI.addToggle(spoofSec, "Spoof Win Streak", false, function(v) sp.spoof_winstreak_enabled = v end)
+        UI.addSlider(spoofSec, "Win Streak Value", 0, 9999, 999, false, function(v) sp.spoof_winstreak_value = v end)
+        UI.addToggle(spoofSec, "Spoof Level", false, function(v) sp.spoof_level_enabled = v end)
+        UI.addSlider(spoofSec, "Level Value", 0, 9999, 999, false, function(v) sp.spoof_level_value = v end)
+        UI.addToggle(spoofSec, "Spoof Rank", false, function(v) sp.spoof_rank_enabled = v end)
+        UI.addDropdown(spoofSec, "Rank Value", RANK_OPTIONS, "Nebula", function(v) sp.spoof_rank_value = v end)
+
+        task.spawn(function()
+            while playerGui.Parent do
+                task.wait(0.25)
+                pcall(applySpoofs)
             end
-        end)
-        UI.addSlider(sahurSec, "Sahur Volume", 0, 5, 1, true, function(v) sahur.Volume = v end)
-        UI.addTextBox(sahurSec, "Sahur Asset ID (override)", function(s)
-            local id = (s or ""):gsub("%D", "")
-            if id ~= "" then
-                sahur.SoundId = "rbxassetid://" .. id
-                print("[kamidere] Rage Sahur: override id=" .. sahur.SoundId)
-                if sp.rage_sahur_enabled then
-                    pcall(function() sahur:Stop(); sahur:Play() end)
-                end
-            end
-        end)
-        UI.addButton(sahurSec, "Retry Candidate List", function()
-            trySahur(1, function(ok)
-                if ok and sp.rage_sahur_enabled then
-                    pcall(function() sahur:Play() end)
-                end
-            end)
         end)
 
         -- ============== Unload Cheat ==============
-        UI.addButton(sahurSec, "Unload Cheat", function()
+        UI.addButton(spoofSec, "Unload Cheat", function()
             pcall(function()
                 for _, g in ipairs(playerGui:GetChildren()) do
-                    if g:IsA("ScreenGui") and (g.Name == "KamidereUI" or g.Name == "KamiCrosshair" or g.Name == "KamiFOV" or g.Name == "KamiderePopup") then
+                    if g:IsA("ScreenGui") and (g.Name == "KamidereUI" or g.Name == "KamiCrosshair" or g.Name == "KamiFOV" or g.Name == "KamiderePopup" or g.Name == "KamidereCursor" or g.Name == "KamidereKeybinds") then
                         g:Destroy()
                     end
                 end
-                if sahur.Parent then sahur:Destroy() end
                 local control = getgenv()["kamidere - Cracked"] or getgenv()["Kamidere"]
                 if control then control.stopped = true end
                 getgenv().UE_LOADED = nil
@@ -493793,6 +493848,104 @@ end)
         print("[kamidere] addon: ui-polish ready")
         end) -- pcall
         if not __ok then warn("[kamidere] UI POLISH ERROR: " .. tostring(__err)) end
+    end)
+
+    -- ============================================================
+    -- [GLASS PANELS] - frosted translucent look on sidebar + title
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        task.wait(4)
+        -- Sidebar glass
+        local sidebar = mainFrame:FindFirstChild("Sidebar")
+        if sidebar then
+            pcall(function()
+                sidebar.BackgroundTransparency = 0.25
+                sidebar.BackgroundColor3 = Color3.fromRGB(12, 11, 10)
+                local sc = sidebar:FindFirstChildOfClass("UICorner") or Instance.new("UICorner")
+                sc.CornerRadius = UDim.new(0, 6); sc.Parent = sidebar
+                local ss = sidebar:FindFirstChildOfClass("UIStroke") or Instance.new("UIStroke")
+                ss.Color = COLORS.AccentDark; ss.Thickness = 1; ss.Transparency = 0.4; ss.Parent = sidebar
+                sidebar.ClipsDescendants = false
+            end)
+        end
+        -- Title bar glass (top strip of mainFrame)
+        local titleBar = mainFrame:FindFirstChild("TitleBar")
+        if titleBar then
+            pcall(function()
+                titleBar.BackgroundTransparency = 0.2
+                local tc = titleBar:FindFirstChildOfClass("UICorner") or Instance.new("UICorner")
+                tc.CornerRadius = UDim.new(0, 6); tc.Parent = titleBar
+            end)
+        end
+        -- Main frame glass accent
+        pcall(function()
+            local mc = mainFrame:FindFirstChildOfClass("UICorner") or Instance.new("UICorner")
+            mc.CornerRadius = UDim.new(0, 8); mc.Parent = mainFrame
+            local ms = mainFrame:FindFirstChildOfClass("UIStroke") or Instance.new("UIStroke")
+            ms.Color = COLORS.AccentDark; ms.Thickness = 1; ms.Transparency = 0.3; ms.Parent = mainFrame
+        end)
+        -- Search bar glass
+        local sb = mainFrame:FindFirstChild("SearchBar")
+        if sb then
+            pcall(function() sb.BackgroundTransparency = 0.25 end)
+        end
+        print("[kamidere] addon: glass panels applied")
+        end) -- pcall
+        if not __ok then warn("[kamidere] GLASS PANELS ERROR: " .. tostring(__err)) end
+    end)
+
+    -- ============================================================
+    -- [SILENT AIM HITBOX] - customizable head/body shot percentages
+    -- Operator picks e.g. 70% head / 30% body. Exposed to any
+    -- ragebot (VM or ours) via getgenv()._kami_PickHitPart() which
+    -- returns the part name to aim at based on a roll vs the head%
+    -- threshold.
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        task.wait(3)
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
+
+        local sa = {
+            enabled   = false,
+            head_pct  = 70,  -- 0-100
+            body_part = "HumanoidRootPart",
+        }
+
+        local BODY_PART_CHOICES = {
+            "HumanoidRootPart", "UpperTorso", "LowerTorso", "Torso",
+            "LeftArm", "RightArm", "LeftLeg", "RightLeg",
+        }
+
+        getgenv()._kami_SilentAimEnabled = function() return sa.enabled end
+        getgenv()._kami_HeadPct          = function() return sa.head_pct end
+        getgenv()._kami_PickHitPart = function()
+            if math.random(1, 100) <= sa.head_pct then
+                return "Head"
+            else
+                return sa.body_part
+            end
+        end
+
+        local saSec = UI.createSection(miscTab, "Silent Aim Hitbox", "left")
+        UI.addToggle(saSec, "Enable Hitbox Roll", false, function(v) sa.enabled = v end)
+        UI.addSlider(saSec, "Head %", 0, 100, 70, false, function(v) sa.head_pct = v end)
+        UI.addDropdown(saSec, "Body Fallback Part", BODY_PART_CHOICES, "HumanoidRootPart", function(v)
+            sa.body_part = v
+        end)
+        UI.addButton(saSec, "Test Roll (10x)", function()
+            local head, body = 0, 0
+            for _ = 1, 10 do
+                local pt = getgenv()._kami_PickHitPart()
+                if pt == "Head" then head = head + 1 else body = body + 1 end
+            end
+            print(("[kamidere] silent aim roll 10x: head=%d body=%d"):format(head, body))
+        end)
+        print("[kamidere] addon: silent-aim-hitbox section built")
+        end) -- pcall
+        if not __ok then warn("[kamidere] SILENT AIM ERROR: " .. tostring(__err)) end
     end)
 
     -- ============================================================
