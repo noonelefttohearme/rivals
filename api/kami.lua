@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-07.r20"
+    local KAMI_BUILD = "2026-11-07.r21"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -492548,15 +492548,35 @@ end)
             local fn = EFFECTS[hx.fx_name]; if not fn then return end
             pcall(fn, cf, hx.fx_color, hx.fx_size, hx.fx_lifetime)
         end
-        local function playSound(cf)
-            local id = SOUND_IDS[hx.snd_name]; if not id then return end
-            local p = mkPart(cf, Color3.new(1, 1, 1), 0.1, 1); p.CanCollide = false
+        -- Play as GLOBAL 2D audio parented to SoundService so it's not
+        -- subject to 3D RollOff, part-spawn timing, or workspace sandbox
+        -- rules in some executors. Logs if the SoundId refuses to load
+        -- so we can see which asset ids are dead.
+        local SoundService_HX = game:GetService("SoundService")
+        local function playSound(_cf)
+            local id = SOUND_IDS[hx.snd_name]
+            if not id then
+                warn("[kamidere] no asset id for sound: " .. tostring(hx.snd_name))
+                return
+            end
             local s = Instance.new("Sound")
-            s.SoundId = id; s.Volume = hx.snd_volume
-            s.RollOffMode = Enum.RollOffMode.Linear; s.RollOffMaxDistance = 180
-            s.Parent = p; s:Play()
-            s.Ended:Connect(function() if p.Parent then p:Destroy() end end)
-            Debris_HX:AddItem(p, 6)
+            s.SoundId = id
+            s.Volume  = hx.snd_volume
+            s.Parent  = SoundService_HX
+            print(("[kamidere] playSound '%s' id=%s vol=%.2f"):format(hx.snd_name, id, hx.snd_volume))
+            -- Fire-and-forget + self-clean; don't wait on load, roblox
+            -- buffers short audio. If asset is dead, Sound.Loaded fails
+            -- and we log once below.
+            s.Played:Connect(function() print("[kamidere] sound Played fired") end)
+            s:Play()
+            task.spawn(function()
+                task.wait(0.4)
+                if s.Parent and not s.IsLoaded then
+                    warn("[kamidere] sound did not load within 0.4s: " .. id)
+                end
+            end)
+            s.Ended:Connect(function() if s.Parent then s:Destroy() end end)
+            Debris_HX:AddItem(s, 10)
         end
 
         -- ------------- UI -------------
