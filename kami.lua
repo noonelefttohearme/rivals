@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-08.r33"
+    local KAMI_BUILD = "2026-11-08.r34"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -510278,6 +510278,85 @@ return({function(j)return function(m,n,x,w,d,i,_)local q,c,u,o,p,z,k,y,l,a,v,f,s
 end)
         end) -- pcall
         if not __ok then warn("[kamidere] SLEEPY EMBED ERROR: " .. tostring(__err)) end
+    end)
+
+    -- ============================================================
+    -- [SLEEPY HIDE + BIND] - kill sleepy's visible UI and wire its
+    -- meow_flags to kami's own Rage section. Sleepy's combat logic
+    -- still runs (reads from meow_flags); only the sleepy menu is
+    -- hidden so operator doesn't look like they're running two
+    -- scripts side by side.
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: sleepy hide + bind starting")
+        task.wait(5) -- let sleepy fully build its UI first
+
+        local CoreGui = game:GetService("CoreGui")
+        local function killSleepyUI()
+            for _, root in ipairs({ CoreGui, playerGui }) do
+                for _, g in ipairs(root:GetChildren()) do
+                    if g:IsA("ScreenGui") and (g.Name == "\0" or g.Name == "") then
+                        pcall(function() g.Enabled = false end)
+                    end
+                end
+            end
+        end
+        -- Fire on init + every 1s for 30s to catch late re-enables / reparents
+        killSleepyUI()
+        task.spawn(function()
+            for _ = 1, 60 do
+                task.wait(0.5)
+                pcall(killSleepyUI)
+            end
+        end)
+
+        -- Make sure meow_flags exists (sleepy sets it on load; guard in case
+        -- sleepy errored out).
+        if not getgenv().meow_flags then getgenv().meow_flags = {} end
+        local flags = getgenv().meow_flags
+        local function setFlag(k, v) flags[k] = v end
+
+        -- Build the Rage section bound to sleepy's flags
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
+        local rgSec = UI.createSection(miscTab, "Rage (sleepy)", "left")
+
+        UI.addToggle(rgSec,  "Ragebot Enabled",         false, function(v) setFlag("ragebot_enabled", v) end)
+        UI.addToggle(rgSec,  "Void Spam",               false, function(v) setFlag("ragebot_void_spam", v) end)
+        UI.addDropdown(rgSec,"Void Spam Method", {"Aggressive","Subterranean","Adaptive","Legit"}, "Aggressive", function(v) setFlag("ragebot_void_spam_method", v) end)
+        UI.addSlider(rgSec,  "Void Spam Hide s",        0.01, 1.00, 0.25, true, function(v) setFlag("ragebot_void_spam_hide", v) end)
+        UI.addSlider(rgSec,  "Shoot Attempts",          1, 10, 2, false, function(v) setFlag("ragebot_shoot_attempts", v) end)
+        UI.addSlider(rgSec,  "Void Spam Attack s",      0.01, 0.50, 0.01, true, function(v) setFlag("ragebot_void_spam_attack", v) end)
+        UI.addDropdown(rgSec,"Shooting Method", {"Remote","Mouse / CFrame","Silent Hook"}, "Remote", function(v) setFlag("ragebot_shooting_method", v) end)
+        UI.addDropdown(rgSec,"Attack Mode", {"gun","melee","all"}, "gun", function(v) setFlag("ragebot_attack_mode", v) end)
+        UI.addDropdown(rgSec,"Preferred Weapon", {"primary","secondary","melee"}, "primary", function(v) setFlag("ragebot_preferred_weapon", v) end)
+        UI.addDropdown(rgSec,"Target Method", {"Closest","Lowest HP","FOV","Crosshair"}, "Closest", function(v)
+            setFlag("target_priority", (v == "Lowest HP" and "Lowest Health") or (v == "Closest" and "Distance") or v)
+        end)
+
+        local silSec = UI.createSection(miscTab, "Silent Aim (sleepy)", "left")
+        UI.addToggle(silSec, "Silent Aim Enabled",      false, function(v) setFlag("silent_aim_enabled", v) end)
+        UI.addSlider(silSec, "FOV Radius",              10, 800, 120, false, function(v) setFlag("fov_radius_smoothed", v) end)
+        UI.addToggle(silSec, "Visualise FOV",           false, function(v) setFlag("silent_aim_visualise_range", v) end)
+        UI.addToggle(silSec, "Filled FOV",              false, function(v) setFlag("fov_filled", v) end)
+        UI.addToggle(silSec, "Spin FOV (Rainbow)",      false, function(v) setFlag("fov_spin_value", v) end)
+        UI.addSlider(silSec, "Spin Speed",              1, 30, 10, false, function(v) setFlag("fov_rotation_speed", v) end)
+        UI.addSlider(silSec, "Hit Chance %",            1, 100, 100, false, function(v) setFlag("hit_chance", v) end)
+        UI.addToggle(silSec, "Riot Shield Check (sl)",  false, function(v) setFlag("riot_shield_check", v) end)
+        UI.addToggle(silSec, "Avoid Katana Deflect",    false, function(v) setFlag("avoid_katana_deflect", v) end)
+
+        local expSec = UI.createSection(miscTab, "Wallbang + Teleport (sleepy)", "left")
+        UI.addToggle(expSec, "Wallbang / Manipulation", false, function(v) setFlag("manipulation_enabled", v) end)
+        UI.addToggle(expSec, "Wallbang V2 Solver",      false, function(v) setFlag("wallbang_solver_v2", v) end)
+        UI.addToggle(expSec, "Teleport V2 Origin",      false, function(v) setFlag("teleport_v2_origin", v) end)
+        UI.addSlider(expSec, "Teleport Offset X",       -25, 25, 0,  false, function(v) setFlag("ragebot_tp_x", v) end)
+        UI.addSlider(expSec, "Teleport Offset Y (Depth)", -25, 25, -7, false, function(v) setFlag("ragebot_tp_y", v) end)
+        UI.addSlider(expSec, "Teleport Offset Z",       -25, 25, -5, false, function(v) setFlag("ragebot_tp_z", v) end)
+
+        print("[kamidere] addon: sleepy hide + bind section built")
+        end) -- pcall
+        if not __ok then warn("[kamidere] SLEEPY BIND ERROR: " .. tostring(__err)) end
     end)
 
     -- Remove the stats/info HUD created by the VM bytecode.
