@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-08.r36"
+    local KAMI_BUILD = "2026-11-08.r37"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -493911,17 +493911,114 @@ end)
             end)
         end
 
+        -- -------- Ragebot + Teleport V2 + Wallbang (ported pattern from sleepy) --------
+        -- sleepy's dispatchRageShot (sleepy.lua line 3155) uses rivals'
+        -- FighterController to fire shots server-side. We mirror that pattern
+        -- directly: get the fighter's EquippedItem and call Input/Use.
+        rg.ragebot_enabled = false
+        rg.ragebot_rate = 0.1   -- seconds between shot bursts
+        rg.ragebot_attempts = 2 -- shots per burst
+        rg.tp_v2_enabled = false
+        rg.tp_x, rg.tp_y, rg.tp_z = 0, -7, -5
+        rg.wallbang_enabled = false
+
+        local function getFighter()
+            local lps = LP_RG:FindFirstChild("PlayerScripts")
+            local fctrl = lps and lps:FindFirstChild("Controllers")
+                and lps.Controllers:FindFirstChild("FighterController")
+            if not fctrl then return nil end
+            local ok, f = pcall(function() return fctrl:GetFighter(LP_RG) end)
+            return ok and f or nil
+        end
+
+        local function dispatchShot(targetRoot)
+            local char = LP_RG.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if not root then return end
+
+            local originalCF
+            if rg.tp_v2_enabled and targetRoot then
+                originalCF = root.CFrame
+                pcall(function()
+                    root.CFrame = targetRoot.CFrame
+                        * CFrame.new(rg.tp_x, rg.tp_y, rg.tp_z)
+                    root.AssemblyLinearVelocity = Vector3.zero
+                end)
+            end
+
+            -- Mouse click via VIM
+            pcall(function()
+                if VIM_RG then
+                    local cam = workspace.CurrentCamera
+                    local center = cam and cam.ViewportSize / 2 or Vector2.new(640, 360)
+                    VIM_RG:SendMouseButtonEvent(center.X, center.Y, 0, true,  game, 1)
+                    task.wait(0.01)
+                    VIM_RG:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 1)
+                end
+            end)
+
+            -- Tool activate
+            pcall(function()
+                local tool = char:FindFirstChildOfClass("Tool")
+                if tool then tool:Activate() end
+            end)
+
+            -- Rivals FighterController Input/Use path
+            pcall(function()
+                local fighter = getFighter()
+                local eqItem = fighter and fighter.EquippedItem
+                if eqItem then
+                    if eqItem.Input then eqItem:Input("StartShooting") end
+                    if eqItem.Use then eqItem:Use() end
+                    if rg.wallbang_enabled and eqItem.Input then
+                        -- Wallbang shim: fire StartShooting multiple times
+                        -- back-to-back; some remotes accept chained inputs and
+                        -- bypass client-side wall checks.
+                        for _ = 1, 2 do eqItem:Input("StartShooting") end
+                    end
+                end
+            end)
+
+            if rg.tp_v2_enabled and originalCF then
+                pcall(function()
+                    root.CFrame = originalCF
+                    root.AssemblyLinearVelocity = Vector3.zero
+                end)
+            end
+        end
+
+        local lastShot = 0
+        RunService.Heartbeat:Connect(function()
+            if not rg.ragebot_enabled then return end
+            local now = tick()
+            if now - lastShot < rg.ragebot_rate then return end
+            local target, _, targetRoot = nearestEnemy(500)
+            if not target or not targetRoot then return end
+            lastShot = now
+            for _ = 1, rg.ragebot_attempts do
+                dispatchShot(targetRoot)
+            end
+        end)
+
         -- -------- UI --------
         local rgSec = UI.createSection(miscTab, "Rage", "left")
-        UI.addToggle(rgSec, "Melee Aura", false, function(v) rg.melee_aura_enabled = v end)
-        UI.addSlider(rgSec, "Melee Safe Reach", 5, 25, 16, false, function(v) rg.melee_reach = v end)
-        UI.addSlider(rgSec, "Swing Cadence (s)", 0.05, 1.5, 0.25, true, function(v) rg.melee_cadence = v end)
-        UI.addToggle(rgSec, "Auto Face Back (Backstab)", false, function(v) rg.auto_face_back = v end)
-        UI.addToggle(rgSec, "Auto Weapon Swap Empty", false, function(v) rg.auto_weapon_swap = v end)
-        UI.addKeybind(rgSec, "Swap Key", Enum.KeyCode.Q, function(k) rg.swap_key = k end)
-        UI.addToggle(rgSec, "Spin FOV (Rainbow)", false, function(v) rg.fov_spin = v end)
-        UI.addSlider(rgSec, "FOV Spin Speed", 1, 30, 10, false, function(v) rg.fov_spin_speed = v end)
-        UI.addToggle(rgSec, "Filled FOV Circle (rage)", false, function(v) rg.fov_filled = v end)
+        UI.addToggle(rgSec,  "Ragebot Enabled",     false, function(v) rg.ragebot_enabled = v end)
+        UI.addSlider(rgSec,  "Ragebot Rate (s)",    0.01, 1.0, 0.1, true, function(v) rg.ragebot_rate = v end)
+        UI.addSlider(rgSec,  "Shot Attempts",       1, 10, 2, false, function(v) rg.ragebot_attempts = v end)
+        UI.addToggle(rgSec,  "Teleport V2",         false, function(v) rg.tp_v2_enabled = v end)
+        UI.addSlider(rgSec,  "TP Offset X",         -25, 25, 0, false, function(v) rg.tp_x = v end)
+        UI.addSlider(rgSec,  "TP Offset Y (Depth)", -25, 25, -7, false, function(v) rg.tp_y = v end)
+        UI.addSlider(rgSec,  "TP Offset Z",         -25, 25, -5, false, function(v) rg.tp_z = v end)
+        UI.addToggle(rgSec,  "Wallbang",            false, function(v) rg.wallbang_enabled = v end)
+        UI.addToggle(rgSec,  "Melee Aura",          false, function(v) rg.melee_aura_enabled = v end)
+        UI.addSlider(rgSec,  "Melee Safe Reach",    5, 25, 16, false, function(v) rg.melee_reach = v end)
+        UI.addSlider(rgSec,  "Swing Cadence (s)",   0.05, 1.5, 0.25, true, function(v) rg.melee_cadence = v end)
+        UI.addToggle(rgSec,  "Auto Face Back",      false, function(v) rg.auto_face_back = v end)
+        UI.addToggle(rgSec,  "Auto Weapon Swap",    false, function(v) rg.auto_weapon_swap = v end)
+        UI.addKeybind(rgSec, "Swap Key",            Enum.KeyCode.Q, function(k) rg.swap_key = k end)
+        UI.addToggle(rgSec,  "Spin FOV (Rainbow)",  false, function(v) rg.fov_spin = v end)
+        UI.addSlider(rgSec,  "FOV Spin Speed",      1, 30, 10, false, function(v) rg.fov_spin_speed = v end)
+        UI.addToggle(rgSec,  "Filled FOV Circle",   false, function(v) rg.fov_filled = v end)
 
         print("[kamidere] addon: rage section built")
         end) -- pcall
