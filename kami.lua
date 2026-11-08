@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-07.r31"
+    local KAMI_BUILD = "2026-11-08.r32"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -493730,6 +493730,202 @@ end)
         print("[kamidere] addon: sleepy-port section built")
         end) -- pcall
         if not __ok then warn("[kamidere] SLEEPY PORT ERROR: " .. tostring(__err)) end
+    end)
+
+    -- ============================================================
+    -- [RAGE] - ported from sleepy.lua's rage tab, real features only.
+    -- Shim-only features (ragebot enable, voidspam, silent aim enable,
+    -- wallbang, teleport offsets, shooting method) are skipped because
+    -- they need rivals' internal remote hooks to do anything.
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        print("[kamidere] addon: rage starting")
+        task.wait(3)
+
+        local miscTab = _tabObjects[4]
+        if not miscTab then return end
+
+        local Players_RG   = game:GetService("Players")
+        local LP_RG        = Players_RG.LocalPlayer
+        local VIM_RG       = nil
+        pcall(function() VIM_RG = game:GetService("VirtualInputManager") end)
+
+        local rg = {
+            -- Melee
+            melee_aura_enabled    = false,
+            melee_reach           = 16,
+            melee_cadence         = 0.25,  -- seconds between swings
+            auto_face_back        = false,
+            -- Weapon
+            auto_weapon_swap      = false,
+            swap_key              = Enum.KeyCode.Q,
+            -- FOV upgrades (wire into existing FOV visualiser)
+            fov_spin              = false,
+            fov_spin_speed        = 10,
+            fov_filled            = false,
+        }
+
+        local function isEnemy(plr)
+            if plr == LP_RG then return false end
+            if plr.Team and LP_RG.Team and plr.Team == LP_RG.Team then return false end
+            return true
+        end
+
+        local function nearestEnemy(withinStuds)
+            local char = LP_RG.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if not hrp then return nil, nil, nil end
+            local best, bestD, bestRoot = nil, math.huge, nil
+            for _, p in ipairs(Players_RG:GetPlayers()) do
+                if isEnemy(p) then
+                    local ch = p.Character
+                    local root = ch and ch:FindFirstChild("HumanoidRootPart")
+                    local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+                    if root and hum and hum.Health > 0 then
+                        local d = (root.Position - hrp.Position).Magnitude
+                        if d < bestD and d <= withinStuds then
+                            best, bestD, bestRoot = p, d, root
+                        end
+                    end
+                end
+            end
+            return best, bestD, bestRoot
+        end
+
+        -- -------- Melee Aura --------
+        -- Fires MouseButton1 via VirtualInputManager when a melee is
+        -- equipped and an enemy is within reach. If VIM isn't exposed
+        -- by the executor, falls back to activating the tool directly.
+        local function swingMelee()
+            local char = LP_RG.Character
+            local tool = char and char:FindFirstChildOfClass("Tool")
+            if not tool then return end
+            if VIM_RG then
+                pcall(function()
+                    VIM_RG:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                    VIM_RG:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+                end)
+            else
+                pcall(function() tool:Activate() end)
+            end
+        end
+
+        local lastSwing = 0
+        RunService.Heartbeat:Connect(function()
+            if not rg.melee_aura_enabled then return end
+            local now = tick()
+            if now - lastSwing < rg.melee_cadence then return end
+            local char = LP_RG.Character
+            local tool = char and char:FindFirstChildOfClass("Tool")
+            if not tool then return end
+            -- Simple melee-weapon heuristic: tool name contains knife/sword/katana/axe/hammer
+            local tn = tool.Name:lower()
+            local isMelee = tn:find("knife") or tn:find("sword") or tn:find("katana") or tn:find("axe") or tn:find("hammer") or tn:find("blade") or tn:find("machete")
+            if not isMelee then return end
+            local target, dist = nearestEnemy(rg.melee_reach)
+            if target then
+                swingMelee()
+                lastSwing = now
+            end
+        end)
+
+        -- -------- Auto Face Back --------
+        -- Rotates the local character's HumanoidRootPart so its back faces
+        -- the nearest enemy during melee combat. Some games register melee
+        -- hits by the attacker's forward vector; facing-back makes every
+        -- swing behave like a backstab.
+        RunService.Heartbeat:Connect(function()
+            if not rg.auto_face_back then return end
+            local char = LP_RG.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+            local _, _, enemyRoot = nearestEnemy(rg.melee_reach * 1.5)
+            if enemyRoot then
+                local pos = hrp.Position
+                local toEnemy = (enemyRoot.Position - pos)
+                -- Face AWAY from the enemy: lookAt(pos, pos - toEnemy)
+                pcall(function()
+                    hrp.CFrame = CFrame.lookAt(pos, pos - Vector3.new(toEnemy.X, 0, toEnemy.Z))
+                end)
+            end
+        end)
+
+        -- -------- Auto Weapon Swap When Empty --------
+        -- Watches the equipped Tool's Ammo attribute / child IntValue.
+        -- When it hits 0, fires the configured swap keybind.
+        local lastSwap = 0
+        RunService.Heartbeat:Connect(function()
+            if not rg.auto_weapon_swap then return end
+            local now = tick()
+            if now - lastSwap < 1.5 then return end
+            local char = LP_RG.Character
+            local tool = char and char:FindFirstChildOfClass("Tool")
+            if not tool then return end
+            local ammo
+            local a1 = tool:GetAttribute("Ammo"); if type(a1) == "number" then ammo = a1 end
+            if not ammo then
+                local iv = tool:FindFirstChild("Ammo")
+                if iv and iv:IsA("IntValue") then ammo = iv.Value end
+            end
+            if ammo and ammo <= 0 then
+                if VIM_RG then
+                    pcall(function()
+                        VIM_RG:SendKeyEvent(true,  rg.swap_key, false, game)
+                        task.wait(0.05)
+                        VIM_RG:SendKeyEvent(false, rg.swap_key, false, game)
+                    end)
+                end
+                lastSwap = now
+            end
+        end)
+
+        -- -------- FOV upgrades (hook the existing KamiFOV ScreenGui) --------
+        local fovGui = playerGui:FindFirstChild("KamiFOV")
+        local fovCircle = fovGui and fovGui:FindFirstChildOfClass("Frame")
+        if fovCircle then
+            local fovGrad = Instance.new("UIGradient")
+            fovGrad.Rotation = 0
+            fovGrad.Color = ColorSequence.new(Color3.fromRGB(255, 220, 90))
+            fovGrad.Enabled = false
+            fovGrad.Parent = fovCircle
+
+            local huePhase = 0
+            RunService.RenderStepped:Connect(function(dt)
+                if rg.fov_spin and fovGrad then
+                    huePhase = (huePhase + dt * rg.fov_spin_speed * 0.1) % 1
+                    fovGrad.Color = ColorSequence.new({
+                        ColorSequenceKeypoint.new(0.000, Color3.fromHSV(huePhase,                 1, 1)),
+                        ColorSequenceKeypoint.new(0.333, Color3.fromHSV((huePhase + 0.33) % 1,    1, 1)),
+                        ColorSequenceKeypoint.new(0.666, Color3.fromHSV((huePhase + 0.66) % 1,    1, 1)),
+                        ColorSequenceKeypoint.new(1.000, Color3.fromHSV(huePhase,                 1, 1)),
+                    })
+                    fovGrad.Rotation = (fovGrad.Rotation + dt * rg.fov_spin_speed * 6) % 360
+                    fovGrad.Enabled = true
+                elseif fovGrad then
+                    fovGrad.Enabled = false
+                end
+                if rg.fov_filled then
+                    fovCircle.BackgroundTransparency = 0.7
+                end
+            end)
+        end
+
+        -- -------- UI --------
+        local rgSec = UI.createSection(miscTab, "Rage", "left")
+        UI.addToggle(rgSec, "Melee Aura", false, function(v) rg.melee_aura_enabled = v end)
+        UI.addSlider(rgSec, "Melee Safe Reach", 5, 25, 16, false, function(v) rg.melee_reach = v end)
+        UI.addSlider(rgSec, "Swing Cadence (s)", 0.05, 1.5, 0.25, true, function(v) rg.melee_cadence = v end)
+        UI.addToggle(rgSec, "Auto Face Back (Backstab)", false, function(v) rg.auto_face_back = v end)
+        UI.addToggle(rgSec, "Auto Weapon Swap Empty", false, function(v) rg.auto_weapon_swap = v end)
+        UI.addKeybind(rgSec, "Swap Key", Enum.KeyCode.Q, function(k) rg.swap_key = k end)
+        UI.addToggle(rgSec, "Spin FOV (Rainbow)", false, function(v) rg.fov_spin = v end)
+        UI.addSlider(rgSec, "FOV Spin Speed", 1, 30, 10, false, function(v) rg.fov_spin_speed = v end)
+        UI.addToggle(rgSec, "Filled FOV Circle (rage)", false, function(v) rg.fov_filled = v end)
+
+        print("[kamidere] addon: rage section built")
+        end) -- pcall
+        if not __ok then warn("[kamidere] RAGE ERROR: " .. tostring(__err)) end
     end)
 
     -- ============================================================
