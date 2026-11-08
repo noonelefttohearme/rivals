@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-08.r40"
+    local KAMI_BUILD = "2026-11-08.r41"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -492865,25 +492865,61 @@ end)
         local fd = { enabled = false, team_check = false, only_my_hits = true }
 
         -- Track which player my raycast landed on most recently.
-        -- If an enemy's health drops within ~0.4s of that raycast,
-        -- we attribute the damage to the local player.
+        -- Attribute damage to the local player via two strategies:
+        -- 1. Continuous crosshair raycast while LMB is held (catches rapid
+        --    fire + target movement — old InputBegan-only raycast missed
+        --    everything after the initial click).
+        -- 2. Also raycast on InputBegan for the first-frame hit case.
+        -- 3. Widen the attribution window from 0.4s -> 1.5s for lag spikes.
+        -- 4. In addition to the direct raycast hit, also mark any enemy
+        --    whose character is within a tight FOV cone of the camera, so
+        --    shotguns / splash don't need a dead-center raycast.
         local LAST_MY_HIT = {}  -- Player -> tick() timestamp
         local function markHit(plr)
             if plr and plr ~= LP_FD then LAST_MY_HIT[plr] = tick() end
         end
-        UserInputService.InputBegan:Connect(function(input, gp)
-            if gp or not fd.enabled then return end
-            if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+        local function castFromCamera()
+            if not fd.enabled then return end
             local cam = workspace.CurrentCamera; if not cam then return end
             local origin = cam.CFrame.Position
-            local dir = cam.CFrame.LookVector * 500
+            local look   = cam.CFrame.LookVector
             local params = RaycastParams.new()
             params.FilterDescendantsInstances = { LP_FD.Character or Instance.new("Model") }
             params.FilterType = Enum.RaycastFilterType.Exclude
-            local rc = workspace:Raycast(origin, dir, params)
+            local rc = workspace:Raycast(origin, look * 500, params)
             if rc and rc.Instance then
                 local plr = Players_FD:GetPlayerFromCharacter(rc.Instance.Parent)
                 if plr then markHit(plr) end
+            end
+            -- Also mark anyone within a 7-deg cone within 300 studs (covers
+            -- shotgun spread + lead error on fast targets).
+            for _, p in ipairs(Players_FD:GetPlayers()) do
+                if p ~= LP_FD then
+                    local ch = p.Character
+                    local root = ch and ch:FindFirstChild("HumanoidRootPart")
+                    if root then
+                        local toRoot = root.Position - origin
+                        local dist = toRoot.Magnitude
+                        if dist < 300 then
+                            local dir = toRoot.Unit
+                            if dir:Dot(look) > math.cos(math.rad(7)) then
+                                markHit(p)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        UserInputService.InputBegan:Connect(function(input, gp)
+            if gp or not fd.enabled then return end
+            if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+            castFromCamera()
+        end)
+        -- Hold-fire raycast: every Heartbeat while LMB is pressed.
+        RunService.Heartbeat:Connect(function()
+            if not fd.enabled then return end
+            if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+                castFromCamera()
             end
         end)
 
@@ -492894,7 +492930,7 @@ end)
         end
         local function iCaused(plr)
             local t = LAST_MY_HIT[plr]
-            return t and (tick() - t < 0.4)
+            return t and (tick() - t < 1.5)
         end
 
         local function showNumber(cf, amount)
