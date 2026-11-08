@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-08.r37"
+    local KAMI_BUILD = "2026-11-08.r38"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -492932,7 +492932,7 @@ end)
         Players_FD.PlayerAdded:Connect(bindPlr)
 
         -- UI
-        local fdSec = UI.createSection(miscTab, "Fortnite Damage", "right")
+        local fdSec = UI.createSection(miscTab, "Fortnite Damage ⚙", "right")
         UI.addToggle(fdSec, "Damage Numbers", false, function(v) fd.enabled = v end)
         UI.addToggle(fdSec, "Only My Hits", true, function(v) fd.only_my_hits = v end)
         UI.addToggle(fdSec, "Only Enemies", false, function(v) fd.team_check = v end)
@@ -492984,6 +492984,7 @@ end)
             static_rot_enabled = false, static_rot_angle = 180,
             hide_head_angle = false,
             voidspam_enabled = false, voidspam_depth = 50,
+            voidspam_hide_camera = true,  -- freeze camera during void dip so you don't see yourself teleport
             -- Movement / exploits
             walk_mul_enabled = false, walk_mul = 1.5,
             flight_speed_enabled = false, flight_speed = 50,
@@ -493019,6 +493020,8 @@ end)
             rage_sahur_enabled = false, rage_sahur_sound = nil,
             riot_shield_check = false,
         }
+        -- Expose for the Rage task.spawn (lives in a separate closure)
+        getgenv()._kami_sp = sp
 
         local function nameKey(s) return tostring(s or ""):lower():gsub("%s+", "") end
         local function isEnemy(plr)
@@ -493027,18 +493030,9 @@ end)
             return true
         end
 
-        -- ============== HvH / Anti-aim ==============
-        local hvhSec = UI.createSection(miscTab, "HvH / Anti-Aim", "left")
-        UI.addToggle(hvhSec, "Jitter", false, function(v) sp.jitter_enabled = v end)
-        UI.addSlider(hvhSec, "Jitter Speed", 1, 60, 10, true, function(v) sp.jitter_speed = v end)
-        UI.addToggle(hvhSec, "Spinbot", false, function(v) sp.spinbot_enabled = v end)
-        UI.addSlider(hvhSec, "Spin Yaw Speed", 1, 60, 8, true, function(v) sp.spinbot_yaw = v end)
-        UI.addToggle(hvhSec, "Backward Look", false, function(v) sp.backward_look = v end)
-        UI.addToggle(hvhSec, "Static Rotation", false, function(v) sp.static_rot_enabled = v end)
-        UI.addSlider(hvhSec, "Static Angle", -180, 180, 180, true, function(v) sp.static_rot_angle = v end)
-        UI.addToggle(hvhSec, "Voidspam Desync", false, function(v) sp.voidspam_enabled = v end)
-        UI.addSlider(hvhSec, "Voidspam Depth", 10, 200, 50, true, function(v) sp.voidspam_depth = v end)
-
+        -- HvH / Anti-aim + Voidspam UI moved to the Rage section (below).
+        -- Keep the per-frame character manipulation here; the Rage section
+        -- just drives sp.* flags from the UI side.
         -- RenderStepped-driven HvH character manipulation
         local spinPhase = 0
         RunService.Heartbeat:Connect(function(dt)
@@ -493068,10 +493062,27 @@ end)
 
             if sp.voidspam_enabled then
                 pcall(function()
+                    local cam = workspace.CurrentCamera
+                    local savedCam, savedType, savedSubject
+                    if sp.voidspam_hide_camera and cam then
+                        savedCam = cam.CFrame
+                        savedType = cam.CameraType
+                        savedSubject = cam.CameraSubject
+                        cam.CameraType = Enum.CameraType.Scriptable
+                        cam.CameraSubject = nil
+                        cam.CFrame = savedCam
+                    end
                     hrp.CFrame = hrp.CFrame + Vector3.new(0, -sp.voidspam_depth, 0)
                     task.delay(0.05, function()
                         if hrp.Parent then
                             hrp.CFrame = hrp.CFrame + Vector3.new(0, sp.voidspam_depth, 0)
+                        end
+                        if sp.voidspam_hide_camera and cam and savedCam then
+                            pcall(function()
+                                cam.CFrame = savedCam
+                                cam.CameraType = savedType or Enum.CameraType.Custom
+                                cam.CameraSubject = savedSubject
+                            end)
                         end
                     end)
                 end)
@@ -493143,17 +493154,15 @@ end)
             end
         end)
 
-        -- ============== Target Priority ==============
-        local prioSec = UI.createSection(miscTab, "Target Priority", "left")
-        UI.addTextBox(prioSec, "Priority: add player name", function(s)
-            if s and s ~= "" then sp.priority_list[nameKey(s)] = true end
-        end)
-        UI.addTextBox(prioSec, "No Target: add player name", function(s)
-            if s and s ~= "" then sp.no_target_list[nameKey(s)] = true end
-        end)
-        UI.addButton(prioSec, "Clear Priority List", function() sp.priority_list = {} end)
-        UI.addButton(prioSec, "Clear No Target List", function() sp.no_target_list = {} end)
-        UI.addToggle(prioSec, "Riot Shield Check", false, function(v) sp.riot_shield_check = v end)
+        -- Target Priority UI moved to the Rage section (below).
+        getgenv()._kami_AddPriority = function(name)
+            if name and name ~= "" then sp.priority_list[nameKey(name)] = true end
+        end
+        getgenv()._kami_AddNoTarget = function(name)
+            if name and name ~= "" then sp.no_target_list[nameKey(name)] = true end
+        end
+        getgenv()._kami_ClearPriority = function() sp.priority_list = {} end
+        getgenv()._kami_ClearNoTarget = function() sp.no_target_list = {} end
         -- Expose helpers so the VM's own ragebot (if wired) can ask us
         getgenv()._kami_IsPriority = function(name)
             return sp.priority_list[nameKey(name)] == true
@@ -493173,7 +493182,7 @@ end)
         end
 
         -- ============== Visuals / World ==============
-        local worldSec = UI.createSection(miscTab, "World Visuals", "right")
+        local worldSec = UI.createSection(miscTab, "World Visuals ⚙", "right")
 
         local SKYBOX_PRESETS = {
             ["Default"]       = nil,
@@ -493281,7 +493290,7 @@ end)
         end)
 
         -- ============== Crosshair ==============
-        local crossSec = UI.createSection(miscTab, "Crosshair", "right")
+        local crossSec = UI.createSection(miscTab, "Crosshair ⚙", "right")
         local crossGui = Instance.new("ScreenGui"); crossGui.Name = "KamiCrosshair"
         crossGui.IgnoreGuiInset = true; crossGui.DisplayOrder = 50
         crossGui.ResetOnSpawn = false; crossGui.Parent = playerGui
@@ -493371,7 +493380,7 @@ end)
         end)
 
         -- ============== HUD ==============
-        local hudSec = UI.createSection(miscTab, "HUD", "right")
+        local hudSec = UI.createSection(miscTab, "HUD ⚙", "right")
         -- Win Streak counter
         local wsFrame = Instance.new("Frame"); wsFrame.Size = UDim2.new(0, 120, 0, 40)
         wsFrame.Position = UDim2.new(1, -130, 0, 10); wsFrame.BackgroundTransparency = 1
@@ -494000,8 +494009,11 @@ end)
             end
         end)
 
-        -- -------- UI --------
-        local rgSec = UI.createSection(miscTab, "Rage", "left")
+        -- -------- UI (consolidated Rage section with merged HvH + Priority + Voidspam) --------
+        -- \226\154\153 is the U+2699 GEAR icon in utf-8 bytes.
+        local rgSec = UI.createSection(miscTab, "Rage \226\154\153", "left")
+
+        -- Ragebot core
         UI.addToggle(rgSec,  "Ragebot Enabled",     false, function(v) rg.ragebot_enabled = v end)
         UI.addSlider(rgSec,  "Ragebot Rate (s)",    0.01, 1.0, 0.1, true, function(v) rg.ragebot_rate = v end)
         UI.addSlider(rgSec,  "Shot Attempts",       1, 10, 2, false, function(v) rg.ragebot_attempts = v end)
@@ -494010,12 +494022,40 @@ end)
         UI.addSlider(rgSec,  "TP Offset Y (Depth)", -25, 25, -7, false, function(v) rg.tp_y = v end)
         UI.addSlider(rgSec,  "TP Offset Z",         -25, 25, -5, false, function(v) rg.tp_z = v end)
         UI.addToggle(rgSec,  "Wallbang",            false, function(v) rg.wallbang_enabled = v end)
+
+        -- Melee
         UI.addToggle(rgSec,  "Melee Aura",          false, function(v) rg.melee_aura_enabled = v end)
         UI.addSlider(rgSec,  "Melee Safe Reach",    5, 25, 16, false, function(v) rg.melee_reach = v end)
         UI.addSlider(rgSec,  "Swing Cadence (s)",   0.05, 1.5, 0.25, true, function(v) rg.melee_cadence = v end)
         UI.addToggle(rgSec,  "Auto Face Back",      false, function(v) rg.auto_face_back = v end)
+
+        -- Weapon utility
         UI.addToggle(rgSec,  "Auto Weapon Swap",    false, function(v) rg.auto_weapon_swap = v end)
         UI.addKeybind(rgSec, "Swap Key",            Enum.KeyCode.Q, function(k) rg.swap_key = k end)
+
+        -- HvH / Anti-Aim (merged from old separate section)
+        local sp_shared = getgenv()._kami_sp
+        if sp_shared then
+            UI.addToggle(rgSec, "Jitter",             false, function(v) sp_shared.jitter_enabled = v end)
+            UI.addSlider(rgSec, "Jitter Speed",       1, 60, 10, true, function(v) sp_shared.jitter_speed = v end)
+            UI.addToggle(rgSec, "Spinbot",            false, function(v) sp_shared.spinbot_enabled = v end)
+            UI.addSlider(rgSec, "Spin Yaw Speed",     1, 60, 8, true, function(v) sp_shared.spinbot_yaw = v end)
+            UI.addToggle(rgSec, "Backward Look",      false, function(v) sp_shared.backward_look = v end)
+            UI.addToggle(rgSec, "Static Rotation",    false, function(v) sp_shared.static_rot_enabled = v end)
+            UI.addSlider(rgSec, "Static Angle",       -180, 180, 180, true, function(v) sp_shared.static_rot_angle = v end)
+            UI.addToggle(rgSec, "Voidspam Desync",    false, function(v) sp_shared.voidspam_enabled = v end)
+            UI.addSlider(rgSec, "Voidspam Depth",     10, 200, 50, true, function(v) sp_shared.voidspam_depth = v end)
+            UI.addToggle(rgSec, "Hide Void Camera",   true, function(v) sp_shared.voidspam_hide_camera = v end)
+        end
+
+        -- Target Priority (merged from old separate section)
+        UI.addTextBox(rgSec, "Priority: add player",  function(s) if getgenv()._kami_AddPriority then getgenv()._kami_AddPriority(s) end end)
+        UI.addTextBox(rgSec, "No Target: add player", function(s) if getgenv()._kami_AddNoTarget then getgenv()._kami_AddNoTarget(s) end end)
+        UI.addButton(rgSec,  "Clear Priority",        function() if getgenv()._kami_ClearPriority then getgenv()._kami_ClearPriority() end end)
+        UI.addButton(rgSec,  "Clear No Target",       function() if getgenv()._kami_ClearNoTarget then getgenv()._kami_ClearNoTarget() end end)
+        UI.addToggle(rgSec,  "Riot Shield Check",     false, function(v) if sp_shared then sp_shared.riot_shield_check = v end end)
+
+        -- FOV visualiser upgrades (overlap removed - just the rage-specific ones)
         UI.addToggle(rgSec,  "Spin FOV (Rainbow)",  false, function(v) rg.fov_spin = v end)
         UI.addSlider(rgSec,  "FOV Spin Speed",      1, 30, 10, false, function(v) rg.fov_spin_speed = v end)
         UI.addToggle(rgSec,  "Filled FOV Circle",   false, function(v) rg.fov_filled = v end)
@@ -494567,6 +494607,7 @@ end)
             head_pct  = 70,  -- 0-100
             body_part = "HumanoidRootPart",
         }
+        getgenv()._kami_sa = sa
 
         local BODY_PART_CHOICES = {
             "HumanoidRootPart", "UpperTorso", "LowerTorso", "Torso",
@@ -494583,7 +494624,7 @@ end)
             end
         end
 
-        local saSec = UI.createSection(miscTab, "Silent Aim Hitbox", "left")
+        local saSec = UI.createSection(miscTab, "Silent Aim \226\154\153", "left")
         UI.addToggle(saSec, "Enable Hitbox Roll", false, function(v) sa.enabled = v end)
         UI.addSlider(saSec, "Head %", 0, 100, 70, false, function(v) sa.head_pct = v end)
         UI.addDropdown(saSec, "Body Fallback Part", BODY_PART_CHOICES, "HumanoidRootPart", function(v)
@@ -494820,7 +494861,7 @@ end)
         end
 
         -- UI
-        local vmSec = UI.createSection(miscTab, "View Model", "right")
+        local vmSec = UI.createSection(miscTab, "View Model ⚙", "right")
         local vmToggle = UI.addToggle(vmSec, "Custom Arms", false, function(v)
             if v then enable() else disable() end
         end)
