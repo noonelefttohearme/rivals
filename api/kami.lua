@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-08.r34"
+    local KAMI_BUILD = "2026-11-08.r35"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -510293,22 +510293,80 @@ end)
         task.wait(5) -- let sleepy fully build its UI first
 
         local CoreGui = game:GetService("CoreGui")
+        -- Whitelist: anything kami-owned, plus roblox's own UI names.
+        local KAMI_NAMES = {
+            KamidereUI=true, KamidereCursor=true, KamidereKeybinds=true,
+            KamiCrosshair=true, KamiFOV=true, KamiderePopup=true,
+            ["RobloxGui"]=true, ["RobloxPromptGui"]=true,
+            ["CoreScriptsLoaded"]=true, ["TopbarGui"]=true,
+        }
+        -- All possible UI containers where sleepy might park a ScreenGui.
+        -- Exploit funcs like gethui() return a protected gui container that
+        -- CoreGui walk doesn't reach - we need to hit it directly.
+        local function allHuiRoots()
+            local out = { CoreGui, playerGui }
+            pcall(function() if gethui then out[#out+1] = gethui() end end)
+            pcall(function() if get_hidden_gui then out[#out+1] = get_hidden_gui() end end)
+            pcall(function()
+                local sg = game:GetService("StarterGui")
+                if sg then out[#out+1] = sg end
+            end)
+            return out
+        end
         local function killSleepyUI()
-            for _, root in ipairs({ CoreGui, playerGui }) do
-                for _, g in ipairs(root:GetChildren()) do
-                    if g:IsA("ScreenGui") and (g.Name == "\0" or g.Name == "") then
-                        pcall(function() g.Enabled = false end)
+            for _, root in ipairs(allHuiRoots()) do
+                if root then
+                    for _, g in ipairs(root:GetChildren()) do
+                        if g:IsA("ScreenGui") or g:IsA("GuiBase") then
+                            local nm = g.Name
+                            if not KAMI_NAMES[nm] and not nm:find("^Kami") then
+                                -- Sleepy names its roots "\0" (null char) or "";
+                                -- but some other libs use real names too. Only
+                                -- destroy if name is null/empty OR if the GUI
+                                -- clearly belongs to sleepy (contains its known
+                                -- child names).
+                                local looksSleepy = (nm == "\0") or (nm == "") or (nm:byte(1) and nm:byte(1) < 32)
+                                if not looksSleepy then
+                                    -- Also check descendants for sleepy's markers
+                                    for _, d in ipairs(g:GetDescendants()) do
+                                        if d.Name == "main" and d:IsA("Frame") and d.Parent == g then
+                                            looksSleepy = true; break
+                                        end
+                                    end
+                                end
+                                if looksSleepy then
+                                    pcall(function() g:Destroy() end)
+                                end
+                            end
+                        end
                     end
                 end
             end
         end
-        -- Fire on init + every 1s for 30s to catch late re-enables / reparents
+        -- Fire on init + every 250ms for 60s so late rebuilds also die
         killSleepyUI()
         task.spawn(function()
-            for _ = 1, 60 do
-                task.wait(0.5)
+            for _ = 1, 240 do
+                task.wait(0.25)
                 pcall(killSleepyUI)
             end
+        end)
+        -- Diagnostic: dump every ScreenGui name found so we can see what
+        -- else is around if sleepy still peeks through
+        task.spawn(function()
+            task.wait(8)
+            print("[kamidere] === ScreenGui inventory ===")
+            for _, root in ipairs(allHuiRoots()) do
+                if root then
+                    for _, g in ipairs(root:GetChildren()) do
+                        if g:IsA("GuiBase") then
+                            print(("  [%s] -> %s (%s) Enabled=%s"):format(
+                                root.ClassName, g.Name, g.ClassName, tostring(g.Enabled)))
+                        end
+                    end
+                end
+            end
+            print("[kamidere] === end inventory ===")
         end)
 
         -- Make sure meow_flags exists (sleepy sets it on load; guard in case
