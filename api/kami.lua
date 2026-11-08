@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-08.r39"
+    local KAMI_BUILD = "2026-11-08.r40"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -491909,11 +491909,18 @@ end)
             -- Prefixes whose entire category should be hidden from the UI.
             -- Match by substring on prefix too (not just exact) in case the VM
             -- registers keys under unexpected naming like dmgnums_ or dmgnum_.
-            local _HIDE_EXACT = {damage=true, damagenumber=true, damagenumbers=true, dmg=true, dmgnumber=true, dmgnumbers=true, dmgnum=true, dmgnums=true, dn=true}
+            -- Also hide UE's native ragebot/triggerbot sections so the kami
+            -- Rage section is the only Rage source in the Ragebot tab.
+            local _HIDE_EXACT = {
+                damage=true, damagenumber=true, damagenumbers=true, dmg=true,
+                dmgnumber=true, dmgnumbers=true, dmgnum=true, dmgnums=true, dn=true,
+                ragebot=true, triggerbot=true, targeting=true, target=true,
+            }
             local function _HIDE_PREFIX_FN(p)
                 if _HIDE_EXACT[p] then return true end
                 local lp = p:lower()
                 if lp:find("damage") or lp:find("dmgnum") or lp:find("damnum") then return true end
+                if lp:find("ragebot") or lp:find("triggerbot") then return true end
                 return false
             end
 
