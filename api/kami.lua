@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-08.r38"
+    local KAMI_BUILD = "2026-11-08.r39"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -490055,9 +490055,15 @@ function UI.createSection(tab, titleText, side)
     local parentCol = (side == "right" or (side == nil and tab.nextCol == "right")) and tab.rightCol or tab.leftCol
     tab.nextCol = (parentCol == tab.leftCol) and "right" or "left"
 
+    -- Detect gear icon in title: if present, split it out so we can make
+    -- the trailing icon a clickable collapse/expand handle.
+    local GEAR = "\226\154\153"  -- U+2699 utf-8
+    local hasGear = titleText:find(GEAR, 1, true) ~= nil
+    local cleanTitle = titleText:gsub("%s*" .. GEAR .. "%s*", "")
+
     local sectionOuter = Instance.new("Frame")
     sectionOuter.ClipsDescendants = false
-    sectionOuter.Name = "Section_" .. titleText
+    sectionOuter.Name = "Section_" .. cleanTitle
     sectionOuter.Size = UDim2.new(1, 0, 0, 0)
     sectionOuter.AutomaticSize = Enum.AutomaticSize.Y
     sectionOuter.BackgroundTransparency = 1
@@ -490065,10 +490071,10 @@ function UI.createSection(tab, titleText, side)
 
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Name = "Title"
-    titleLabel.Size = UDim2.new(1, -4, 0, 18)
+    titleLabel.Size = UDim2.new(1, -24, 0, 18)
     titleLabel.Position = UDim2.new(0, 6, 0, 4)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Text = string.gsub(titleText, "^%l", string.upper)
+    titleLabel.Text = string.gsub(cleanTitle, "^%l", string.upper)
     if UI_FONT then pcall(function() titleLabel.FontFace = UI_FONT end) end
     titleLabel.TextSize = 13
     titleLabel.TextColor3 = COLORS.AccentGlow
@@ -490160,6 +490166,38 @@ function UI.createSection(tab, titleText, side)
     pad.PaddingTop = UDim.new(0, 4)
     pad.PaddingBottom = UDim.new(0, 12)
     pad.Parent = container
+
+    -- Clickable gear: collapses/expands the container. Shown only when
+    -- the caller put a gear icon in the section title.
+    if hasGear then
+        local gearBtn = Instance.new("TextButton")
+        gearBtn.Name = "GearToggle"
+        gearBtn.AnchorPoint = Vector2.new(1, 0)
+        gearBtn.Size = UDim2.new(0, 18, 0, 18)
+        gearBtn.Position = UDim2.new(1, -4, 0, 4)
+        gearBtn.BackgroundTransparency = 1
+        gearBtn.Text = GEAR
+        gearBtn.TextColor3 = COLORS.AccentGlow
+        gearBtn.TextSize = 14
+        gearBtn.AutoButtonColor = false
+        if UI_FONT then pcall(function() gearBtn.FontFace = UI_FONT end) end
+        gearBtn.Parent = sectionOuter
+
+        local collapsed = false
+        gearBtn.MouseButton1Click:Connect(function()
+            collapsed = not collapsed
+            container.Visible = not collapsed
+            cardBox.Size = collapsed and UDim2.new(1, 0, 0, 0) or UDim2.new(1, 0, 0, 0)
+            tween(gearBtn, { Rotation = collapsed and 90 or 0 }, 0.2)
+            tween(gearBtn, { TextColor3 = collapsed and COLORS.TextMuted or COLORS.AccentGlow }, 0.2)
+        end)
+        gearBtn.MouseEnter:Connect(function()
+            tween(gearBtn, { TextSize = 16 }, 0.15)
+        end)
+        gearBtn.MouseLeave:Connect(function()
+            tween(gearBtn, { TextSize = 14 }, 0.15)
+        end)
+    end
 
     return container
 end
@@ -494011,7 +494049,10 @@ end)
 
         -- -------- UI (consolidated Rage section with merged HvH + Priority + Voidspam) --------
         -- \226\154\153 is the U+2699 GEAR icon in utf-8 bytes.
-        local rgSec = UI.createSection(miscTab, "Rage \226\154\153", "left")
+        -- Rage lives in the Ragebot tab (tab 1), right next to UE's native
+        -- Ragebot section instead of orphaned under Misc.
+        local ragebotTab = _tabObjects[1] or miscTab
+        local rgSec = UI.createSection(ragebotTab, "Rage \226\154\153", "left")
 
         -- Ragebot core
         UI.addToggle(rgSec,  "Ragebot Enabled",     false, function(v) rg.ragebot_enabled = v end)
@@ -494624,7 +494665,10 @@ end)
             end
         end
 
-        local saSec = UI.createSection(miscTab, "Silent Aim \226\154\153", "left")
+        -- Silent Aim lives in the Aimbot tab (tab 2), next to UE's native
+        -- Aimbot / Silent Aim section.
+        local aimbotTab = _tabObjects[2] or miscTab
+        local saSec = UI.createSection(aimbotTab, "Silent Aim \226\154\153", "left")
         UI.addToggle(saSec, "Enable Hitbox Roll", false, function(v) sa.enabled = v end)
         UI.addSlider(saSec, "Head %", 0, 100, 70, false, function(v) sa.head_pct = v end)
         UI.addDropdown(saSec, "Body Fallback Part", BODY_PART_CHOICES, "HumanoidRootPart", function(v)
