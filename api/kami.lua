@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-09.r45"
+    local KAMI_BUILD = "2026-11-09.r46"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -491647,41 +491647,39 @@ end)
     end)
     UI.addButton(savedSec, "Refresh", function() _cfgDropdown.refreshOptions(_listConfigs()) end)
 
-    -- Logo: blue placeholder + procedural mountain glyph at ZIndex=8 (above dragButton ZIndex=7)
+    -- Logo: embedded kami.wtf A-frame mountain PNG at ZIndex=8 (above dragButton ZIndex=7)
     titleIcon.ImageTransparency = 1; titleIcon.Image = ""
     local _iconPlaceholder = Instance.new("Frame")
     _iconPlaceholder.Size = UDim2.new(0, 36, 0, 36); _iconPlaceholder.Position = UDim2.new(0, 6, 0, 2)
-    _iconPlaceholder.BackgroundColor3 = Color3.fromRGB(14, 20, 38); _iconPlaceholder.BorderSizePixel = 0
+    _iconPlaceholder.BackgroundTransparency = 1
+    _iconPlaceholder.BorderSizePixel = 0
     _iconPlaceholder.ZIndex = 8; _iconPlaceholder.Parent = titleBar
-    local _iconCorner = Instance.new("UICorner"); _iconCorner.CornerRadius = UDim.new(0, 8); _iconCorner.Parent = _iconPlaceholder
-    local _iconStroke = Instance.new("UIStroke")
-    _iconStroke.Color = Color3.fromRGB(63, 123, 232); _iconStroke.Thickness = 1
-    _iconStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; _iconStroke.Parent = _iconPlaceholder
-    local _iconGrad = Instance.new("UIGradient")
-    _iconGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,   Color3.fromRGB(30, 60, 140)),
-        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(63, 123, 232)),
-        ColorSequenceKeypoint.new(1,   Color3.fromRGB(91, 150, 255)),
-    })
-    _iconGrad.Rotation = 135; _iconGrad.Parent = _iconPlaceholder
-    -- Mountain glyph: stacked 1px rows form two overlapping A-frame peaks.
-    -- Pure procedural, no asset loads, no network, no base64.
+    -- Embedded logo bitmap: write to local asset folder, load via getcustomasset.
     pcall(function()
-        local function _peak(parent, baseX, baseY, baseW, h, color, zi)
-            for i = 0, h - 1 do
-                local frac = (i + 1) / h
-                local w = math.max(1, math.floor(baseW * frac + 0.5))
-                local row = Instance.new("Frame")
-                row.BackgroundColor3 = color; row.BorderSizePixel = 0
-                row.Size = UDim2.new(0, w, 0, 1)
-                row.Position = UDim2.new(0, baseX + math.floor((baseW - w) / 2), 0, baseY + i)
-                row.ZIndex = zi; row.Parent = parent
+        local _LOGO_B64 = "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"
+        local b64c = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        local function b64decode(s)
+            s = s:gsub("[^"..b64c.."=]","")
+            local bits,out,res = 0,0,{}
+            for i=1,#s do
+                local c=s:sub(i,i); if c=="=" then break end
+                local v=b64c:find(c,1,true)-1; bits=bits+6; out=out*64+v
+                if bits>=8 then bits=bits-8; res[#res+1]=string.char(math.floor(out/2^bits)%256); out=out%2^bits end
             end
+            return table.concat(res)
         end
-        -- Back peak: tall, left-biased, darker blue
-        _peak(_iconPlaceholder, 4, 7, 20, 22, Color3.fromRGB(91, 150, 255), 9)
-        -- Front peak: shorter, right-biased, near-white
-        _peak(_iconPlaceholder, 15, 12, 17, 17, Color3.fromRGB(230, 240, 255), 10)
+        if not isfolder("kamidere") then makefolder("kamidere") end
+        writefile("kamidere/kami_logo.png", b64decode(_LOGO_B64))
+        local asset = getcustomasset("kamidere/kami_logo.png")
+        if type(asset)=="string" and asset:sub(1,9)=="rbxasset:" then
+            local img = Instance.new("ImageLabel")
+            img.Size = UDim2.new(1, 0, 1, 0)
+            img.BackgroundTransparency = 1
+            img.Image = asset
+            img.ScaleType = Enum.ScaleType.Fit
+            img.ZIndex = 9
+            img.Parent = _iconPlaceholder
+        end
     end)
 
     -- Legacy fionnaV3 base64 image load (removed in r44, kept as no-op for diff clarity)
