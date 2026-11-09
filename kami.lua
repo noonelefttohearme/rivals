@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-08.r41"
+    local KAMI_BUILD = "2026-11-09.r42"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -491914,13 +491914,15 @@ end)
             local _HIDE_EXACT = {
                 damage=true, damagenumber=true, damagenumbers=true, dmg=true,
                 dmgnumber=true, dmgnumbers=true, dmgnum=true, dmgnums=true, dn=true,
-                ragebot=true, triggerbot=true, targeting=true, target=true,
+                ragebot=true, targeting=true, target=true,
+                -- NOTE: triggerbot is NOT hidden - operator wants UE's native
+                -- Triggerbot section back in the Ragebot tab.
             }
             local function _HIDE_PREFIX_FN(p)
                 if _HIDE_EXACT[p] then return true end
                 local lp = p:lower()
                 if lp:find("damage") or lp:find("dmgnum") or lp:find("damnum") then return true end
-                if lp:find("ragebot") or lp:find("triggerbot") then return true end
+                if lp:find("ragebot") then return true end
                 return false
             end
 
@@ -494090,14 +494092,14 @@ end)
             end
         end)
 
-        -- -------- UI (consolidated Rage section with merged HvH + Priority + Voidspam) --------
+        -- -------- UI (split: Rage on left, HvH/Priority on right) --------
         -- \226\154\153 is the U+2699 GEAR icon in utf-8 bytes.
-        -- Rage lives in the Ragebot tab (tab 1), right next to UE's native
-        -- Ragebot section instead of orphaned under Misc.
+        -- Rage lives in the Ragebot tab (tab 1). Split in two so the right
+        -- column isn't empty while left is overloaded.
         local ragebotTab = _tabObjects[1] or miscTab
         local rgSec = UI.createSection(ragebotTab, "Rage \226\154\153", "left")
 
-        -- Ragebot core
+        -- Ragebot core (left column)
         UI.addToggle(rgSec,  "Ragebot Enabled",     false, function(v) rg.ragebot_enabled = v end)
         UI.addSlider(rgSec,  "Ragebot Rate (s)",    0.01, 1.0, 0.1, true, function(v) rg.ragebot_rate = v end)
         UI.addSlider(rgSec,  "Shot Attempts",       1, 10, 2, false, function(v) rg.ragebot_attempts = v end)
@@ -494117,32 +494119,34 @@ end)
         UI.addToggle(rgSec,  "Auto Weapon Swap",    false, function(v) rg.auto_weapon_swap = v end)
         UI.addKeybind(rgSec, "Swap Key",            Enum.KeyCode.Q, function(k) rg.swap_key = k end)
 
-        -- HvH / Anti-Aim (merged from old separate section)
-        local sp_shared = getgenv()._kami_sp
-        if sp_shared then
-            UI.addToggle(rgSec, "Jitter",             false, function(v) sp_shared.jitter_enabled = v end)
-            UI.addSlider(rgSec, "Jitter Speed",       1, 60, 10, true, function(v) sp_shared.jitter_speed = v end)
-            UI.addToggle(rgSec, "Spinbot",            false, function(v) sp_shared.spinbot_enabled = v end)
-            UI.addSlider(rgSec, "Spin Yaw Speed",     1, 60, 8, true, function(v) sp_shared.spinbot_yaw = v end)
-            UI.addToggle(rgSec, "Backward Look",      false, function(v) sp_shared.backward_look = v end)
-            UI.addToggle(rgSec, "Static Rotation",    false, function(v) sp_shared.static_rot_enabled = v end)
-            UI.addSlider(rgSec, "Static Angle",       -180, 180, 180, true, function(v) sp_shared.static_rot_angle = v end)
-            UI.addToggle(rgSec, "Voidspam Desync",    false, function(v) sp_shared.voidspam_enabled = v end)
-            UI.addSlider(rgSec, "Voidspam Depth",     10, 200, 50, true, function(v) sp_shared.voidspam_depth = v end)
-            UI.addToggle(rgSec, "Hide Void Camera",   true, function(v) sp_shared.voidspam_hide_camera = v end)
-        end
-
-        -- Target Priority (merged from old separate section)
-        UI.addTextBox(rgSec, "Priority: add player",  function(s) if getgenv()._kami_AddPriority then getgenv()._kami_AddPriority(s) end end)
-        UI.addTextBox(rgSec, "No Target: add player", function(s) if getgenv()._kami_AddNoTarget then getgenv()._kami_AddNoTarget(s) end end)
-        UI.addButton(rgSec,  "Clear Priority",        function() if getgenv()._kami_ClearPriority then getgenv()._kami_ClearPriority() end end)
-        UI.addButton(rgSec,  "Clear No Target",       function() if getgenv()._kami_ClearNoTarget then getgenv()._kami_ClearNoTarget() end end)
-        UI.addToggle(rgSec,  "Riot Shield Check",     false, function(v) if sp_shared then sp_shared.riot_shield_check = v end end)
-
-        -- FOV visualiser upgrades (overlap removed - just the rage-specific ones)
+        -- FOV visualiser upgrades
         UI.addToggle(rgSec,  "Spin FOV (Rainbow)",  false, function(v) rg.fov_spin = v end)
         UI.addSlider(rgSec,  "FOV Spin Speed",      1, 30, 10, false, function(v) rg.fov_spin_speed = v end)
         UI.addToggle(rgSec,  "Filled FOV Circle",   false, function(v) rg.fov_filled = v end)
+
+        -- -------- Right column: HvH / Anti-Aim + Target Priority --------
+        local hvhSec = UI.createSection(ragebotTab, "Anti-Aim \226\154\153", "right")
+
+        local sp_shared = getgenv()._kami_sp
+        if sp_shared then
+            UI.addToggle(hvhSec, "Jitter",             false, function(v) sp_shared.jitter_enabled = v end)
+            UI.addSlider(hvhSec, "Jitter Speed",       1, 60, 10, true, function(v) sp_shared.jitter_speed = v end)
+            UI.addToggle(hvhSec, "Spinbot",            false, function(v) sp_shared.spinbot_enabled = v end)
+            UI.addSlider(hvhSec, "Spin Yaw Speed",     1, 60, 8, true, function(v) sp_shared.spinbot_yaw = v end)
+            UI.addToggle(hvhSec, "Backward Look",      false, function(v) sp_shared.backward_look = v end)
+            UI.addToggle(hvhSec, "Static Rotation",    false, function(v) sp_shared.static_rot_enabled = v end)
+            UI.addSlider(hvhSec, "Static Angle",       -180, 180, 180, true, function(v) sp_shared.static_rot_angle = v end)
+            UI.addToggle(hvhSec, "Voidspam Desync",    false, function(v) sp_shared.voidspam_enabled = v end)
+            UI.addSlider(hvhSec, "Voidspam Depth",     10, 200, 50, true, function(v) sp_shared.voidspam_depth = v end)
+            UI.addToggle(hvhSec, "Hide Void Camera",   true, function(v) sp_shared.voidspam_hide_camera = v end)
+        end
+
+        local prioSec = UI.createSection(ragebotTab, "Target Priority \226\154\153", "right")
+        UI.addTextBox(prioSec, "Priority: add player",  function(s) if getgenv()._kami_AddPriority then getgenv()._kami_AddPriority(s) end end)
+        UI.addTextBox(prioSec, "No Target: add player", function(s) if getgenv()._kami_AddNoTarget then getgenv()._kami_AddNoTarget(s) end end)
+        UI.addButton(prioSec,  "Clear Priority",        function() if getgenv()._kami_ClearPriority then getgenv()._kami_ClearPriority() end end)
+        UI.addButton(prioSec,  "Clear No Target",       function() if getgenv()._kami_ClearNoTarget then getgenv()._kami_ClearNoTarget() end end)
+        UI.addToggle(prioSec,  "Riot Shield Check",     false, function(v) if sp_shared then sp_shared.riot_shield_check = v end end)
 
         print("[kamidere] addon: rage section built")
         end) -- pcall
