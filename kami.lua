@@ -489410,7 +489410,7 @@ local __kami_result = runApplication()
 -- ============================================================
 ;task.defer(function()
     -- Build tag: bump this when shipping so the console tells us which build loaded.
-    local KAMI_BUILD = "2026-11-09.r44"
+    local KAMI_BUILD = "2026-11-09.r45"
     print("[kamidere] build " .. KAMI_BUILD .. " loaded")
     -- Aggressively hide the VM's own Linoria UI. The Library can be replaced,
     -- the ScreenGui's Enabled can be set back to true by the VM internally, and
@@ -489714,8 +489714,8 @@ for i = 1, #titleText do
     if UI_FONT then pcall(function() charLabel.FontFace = UI_FONT end) end
     charLabel.TextSize = 40
     charLabel:SetAttribute("NoFontScale", true)
-    charLabel.TextColor3 = Color3.fromRGB(210, 170, 55)
-    charLabel.TextStrokeColor3 = Color3.fromRGB(70, 8, 18)
+    charLabel.TextColor3 = Color3.fromRGB(91, 150, 255)
+    charLabel.TextStrokeColor3 = Color3.fromRGB(8, 14, 32)
     charLabel.TextStrokeTransparency = 0
     charLabel.ZIndex = 6
     charLabel.Parent = titleCharsHolder
@@ -489786,7 +489786,7 @@ for i, data in ipairs(sidebarIconsData) do
     iconBtn.MouseEnter:Connect(function()
         if not iconBtn:GetAttribute("ActiveTab") then
             -- ховер без фона, чуть темнее чем раньше, не серый
-            tween(iconBtn, {ImageColor3 = Color3.fromRGB(220, 180, 65)}, 0.12)
+            tween(iconBtn, {ImageColor3 = Color3.fromRGB(120, 175, 255)}, 0.12)
         end
     end)
     iconBtn.MouseLeave:Connect(function()
@@ -490264,7 +490264,7 @@ function UI.addToggle(container, labelText, defaultVal, callback)
         btn.Text = "" -- checkbox style
         if state then
             -- включено: плавная анимация + светло серая обводка только у включенных
-            tween(btn, {BackgroundColor3 = Color3.fromRGB(55, 42, 12), Size = UDim2.new(0, 15, 0, 15), Position = UDim2.new(0, 1, 0.5, -7.5)}, 0.24, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+            tween(btn, {BackgroundColor3 = Color3.fromRGB(14, 32, 78), Size = UDim2.new(0, 15, 0, 15), Position = UDim2.new(0, 1, 0.5, -7.5)}, 0.24, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
             tween(stroke, {Color = Color3.fromRGB(110, 110, 115), Thickness = 1, Transparency = 0.68}, 0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
         else
             -- выключено: плавное уменьшение, обводка исчезает
@@ -490696,7 +490696,7 @@ function UI.addDropdown(container, labelText, options, defaultVal, callback)
 
             optBtn.MouseEnter:Connect(function()
                 if not isSelected then
-                    tween(optBtn, {BackgroundTransparency = 0.9, TextColor3 = Color3.fromRGB(255, 230, 110)}, 0.12)
+                    tween(optBtn, {BackgroundTransparency = 0.9, TextColor3 = Color3.fromRGB(150, 195, 255)}, 0.12)
                 end
             end)
 
@@ -490877,7 +490877,7 @@ function UI.addKeybind(container, labelText, defaultKey, callback)
 
     local function setButtonVisual(active)
         if active then
-            tween(btn, {BackgroundColor3 = Color3.fromRGB(55, 42, 12)}, 0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+            tween(btn, {BackgroundColor3 = Color3.fromRGB(14, 32, 78)}, 0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
             tween(stroke, {Transparency = 0.44}, 0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
             btn.TextColor3 = COLORS.AccentGlow
         else
@@ -491772,7 +491772,7 @@ end)
             b.Position = UDim2.fromOffset(ox, oy); return b
         end
         _curShadow = _arrow(Color3.fromRGB(0,0,0),       1, 1, 9998)
-        _curArrow  = _arrow(Color3.fromRGB(255,220,100), 0, 0, 9999)
+        _curArrow  = _arrow(Color3.fromRGB(91, 150, 255), 0, 0, 9999)
         -- Motion-blur trail: ring of fading gold dots that follow the cursor
         local _TRAIL_N = 8
         local _trailDots = {}
@@ -493130,7 +493130,7 @@ end)
             fov_vis = false, fov_radius = 150, fov_filled = false,
             hit_pulse_enabled = false, hit_pulse_size = 40, hit_pulse_color = Color3.fromRGB(255,215,0),
             hud_scale = 1.0,
-            win_streak_enabled = false, win_streak = 0, streak_color = Color3.fromRGB(255,220,100),
+            win_streak_enabled = false, win_streak = 0, streak_color = Color3.fromRGB(91, 150, 255),
             -- Specific features
             rage_sahur_enabled = false, rage_sahur_sound = nil,
             riot_shield_check = false,
@@ -493568,7 +493568,7 @@ end)
         fovGui.IgnoreGuiInset = true; fovGui.DisplayOrder = 40
         fovGui.ResetOnSpawn = false; fovGui.Parent = playerGui
         local fovCircle = Instance.new("Frame"); fovCircle.BackgroundTransparency = 0.8
-        fovCircle.BackgroundColor3 = Color3.fromRGB(255, 220, 90)
+        fovCircle.BackgroundColor3 = Color3.fromRGB(91, 150, 255)
         fovCircle.BorderSizePixel = 0; fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
         fovCircle.Position = UDim2.new(0.5, 0, 0.5, 0); fovCircle.Parent = fovGui
         local fc = Instance.new("UICorner"); fc.CornerRadius = UDim.new(1, 0); fc.Parent = fovCircle
