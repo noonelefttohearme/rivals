@@ -495121,6 +495121,167 @@ end)
         if not __ok then warn("[kamidere] FLOATING SEARCH ERROR: " .. tostring(__err)) end
     end)
 
+    -- ============================================================
+    -- [TOP WATERMARK] - kamidere pill at top-center, no fps counter.
+    -- Best-effort hides executor-style "<name> <nnn> fps" pills so
+    -- our brand is the only one showing.
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        task.wait(4)
+
+        local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+        local wmGui = Instance.new("ScreenGui")
+        wmGui.Name           = "KamidereWatermark"
+        wmGui.ResetOnSpawn   = false
+        wmGui.IgnoreGuiInset = true
+        wmGui.DisplayOrder   = 10001
+        wmGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        pcall(function()
+            if gethui then wmGui.Parent = gethui()
+            else
+                local okCg, cg = pcall(function() return game:GetService("CoreGui") end)
+                wmGui.Parent = (okCg and cg) or playerGui
+            end
+        end)
+
+        local pill = Instance.new("Frame")
+        pill.Name                   = "Pill"
+        pill.AnchorPoint            = Vector2.new(0.5, 0)
+        pill.Position               = UDim2.new(0.5, 0, 0, 10)
+        pill.Size                   = UDim2.new(0, 140, 0, 28)
+        pill.BackgroundColor3       = COLORS.DropdownBg or Color3.fromRGB(16, 18, 24)
+        pill.BackgroundTransparency = 0.08
+        pill.BorderSizePixel        = 0
+        pill.Parent                 = wmGui
+        local pc = Instance.new("UICorner"); pc.CornerRadius = UDim.new(1, 0); pc.Parent = pill
+        local ps = Instance.new("UIStroke")
+        ps.Color           = COLORS.DropdownBorder or Color3.fromRGB(45, 52, 70)
+        ps.Thickness       = 1
+        ps.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        ps.Parent          = pill
+
+        local glow = Instance.new("Frame")
+        glow.Name                   = "Glow"
+        glow.Size                   = UDim2.new(1, 10, 1, 10)
+        glow.Position               = UDim2.new(0, -5, 0, -5)
+        glow.BackgroundTransparency = 1
+        glow.ZIndex                 = pill.ZIndex - 1
+        glow.Parent                 = pill
+        local gc = Instance.new("UICorner"); gc.CornerRadius = UDim.new(1, 0); gc.Parent = glow
+        local gs = Instance.new("UIStroke")
+        gs.Color        = COLORS.Accent or Color3.fromRGB(70, 110, 220)
+        gs.Thickness    = 2
+        gs.Transparency = 0.8
+        gs.Parent       = glow
+
+        local dot = Instance.new("Frame")
+        dot.Size                   = UDim2.new(0, 6, 0, 6)
+        dot.Position               = UDim2.new(0, 10, 0.5, -3)
+        dot.BackgroundColor3       = COLORS.AccentGlow or Color3.fromRGB(130, 170, 255)
+        dot.BorderSizePixel        = 0
+        dot.Parent                 = pill
+        local dc = Instance.new("UICorner"); dc.CornerRadius = UDim.new(1, 0); dc.Parent = dot
+
+        local label = Instance.new("TextLabel")
+        label.Size                   = UDim2.new(1, -24, 1, 0)
+        label.Position               = UDim2.new(0, 22, 0, 0)
+        label.BackgroundTransparency = 1
+        label.Text                   = "kamidere"
+        label.TextColor3             = COLORS.TextPrimary or Color3.fromRGB(230, 232, 240)
+        label.TextSize               = 14
+        label.TextXAlignment         = Enum.TextXAlignment.Center
+        label.TextYAlignment         = Enum.TextYAlignment.Center
+        label.Parent                 = pill
+        if UI_FONT then pcall(function() label.FontFace = UI_FONT end) end
+
+        -- Soft dot pulse
+        task.spawn(function()
+            local t = 0
+            while wmGui.Parent do
+                t = t + 0.06
+                local a = 0.35 + 0.3 * (0.5 + 0.5 * math.sin(t * 2.4))
+                pcall(function() dot.BackgroundTransparency = a end)
+                task.wait(0.06)
+            end
+        end)
+
+        -- ------------------------------------------------------------
+        -- Best-effort removal of executor-shipped "<name> <nnn> fps"
+        -- watermark pills. We only touch ScreenGuis NOT named
+        -- Kamidere* and only when a visible TextLabel inside matches
+        -- the "<digits> fps" pattern -- so we don't nuke the game's
+        -- own HUD.
+        -- ------------------------------------------------------------
+        local KAMI_NAME = "Kamidere"
+        local function looksLikeOurs(nm)
+            return typeof(nm) == "string" and nm:sub(1, #KAMI_NAME) == KAMI_NAME
+        end
+        local function isFpsPill(gui)
+            if not gui:IsA("ScreenGui") then return false end
+            if looksLikeOurs(gui.Name) then return false end
+            local ok, kids = pcall(function() return gui:GetDescendants() end)
+            if not ok then return false end
+            local sawFps = false
+            for _, d in ipairs(kids) do
+                if d:IsA("TextLabel") or d:IsA("TextButton") then
+                    local okT, t = pcall(function() return d.Text end)
+                    if okT and typeof(t) == "string" then
+                        local lt = t:lower()
+                        -- "240 fps" / "fps: 60" / " 59fps" ...
+                        if lt:match("%d+%s*fps") or lt:match("fps%s*:?%s*%d+") then
+                            sawFps = true
+                            break
+                        end
+                    end
+                end
+            end
+            return sawFps
+        end
+        local function sweep(root)
+            if not root then return end
+            local ok, kids = pcall(function() return root:GetChildren() end)
+            if not ok then return end
+            for _, g in ipairs(kids) do
+                if isFpsPill(g) then
+                    pcall(function() g.Enabled = false end)
+                end
+            end
+        end
+
+        local okCg, cg = pcall(function() return game:GetService("CoreGui") end)
+        local roots = {}
+        if okCg and cg then roots[#roots+1] = cg end
+        if gethui then
+            local okHui, hui = pcall(gethui)
+            if okHui and hui then roots[#roots+1] = hui end
+        end
+        roots[#roots+1] = playerGui
+
+        for _, r in ipairs(roots) do
+            sweep(r)
+            pcall(function()
+                r.ChildAdded:Connect(function(child)
+                    task.wait(0.2)
+                    pcall(function()
+                        if isFpsPill(child) then child.Enabled = false end
+                    end)
+                end)
+            end)
+        end
+        -- Periodic re-sweep in case the executor re-enables it
+        task.spawn(function()
+            while wmGui.Parent do
+                task.wait(2)
+                for _, r in ipairs(roots) do sweep(r) end
+            end
+        end)
+
+        print("[kamidere] addon: watermark ready")
+        end) -- pcall
+        if not __ok then warn("[kamidere] WATERMARK ERROR: " .. tostring(__err)) end
+    end)
+
 end)
 
 return __kami_result
