@@ -77,4 +77,13 @@ local ok2, scriptSrc = pcall(function() return httpFn({ Url = scriptUrl, Method 
 if not ok2 or not scriptSrc or not scriptSrc.Body or #scriptSrc.Body < 10 then
     kickPlayer("Invalid key\nMake a ticket in the discord server! \ndiscord.gg/kamidere")
 end
+
+pcall(function()
+    local sti = rawget(_G, "setthreadidentity")
+             or rawget(_G, "set_thread_identity")
+             or (rawget(_G, "syn") and rawget(_G, "syn").set_thread_identity)
+             or (getgenv and (getgenv().setthreadidentity or getgenv().set_thread_identity))
+    if sti then sti(8) end
+end)
+
 loadstring(scriptSrc.Body)()
