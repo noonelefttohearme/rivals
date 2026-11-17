@@ -494727,6 +494727,400 @@ end)
         end)
     end)
 
+    -- ============================================================
+    -- [FLOATING SEARCH] - standalone rounded search bar, top-left.
+    -- Types -> live popup of matching features. Click a result to
+    -- open the menu on the owning tab/section and flash the control.
+    -- ============================================================
+    task.spawn(function()
+        local __ok, __err = pcall(function()
+        task.wait(5)
+
+        local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+        local searchGui = Instance.new("ScreenGui")
+        searchGui.Name          = "KamidereFloatingSearch"
+        searchGui.ResetOnSpawn  = false
+        searchGui.IgnoreGuiInset= true
+        searchGui.DisplayOrder  = 10000
+        searchGui.ZIndexBehavior= Enum.ZIndexBehavior.Sibling
+        local _cgOk, _cg = pcall(function() return game:GetService("CoreGui") end)
+        pcall(function()
+            if gethui then searchGui.Parent = gethui()
+            elseif _cgOk and _cg then searchGui.Parent = _cg
+            else searchGui.Parent = playerGui end
+        end)
+
+        local BAR_W, BAR_H = 260, 36
+        local bar = Instance.new("Frame")
+        bar.Name                   = "Bar"
+        bar.Size                   = UDim2.new(0, BAR_W, 0, BAR_H)
+        bar.Position               = UDim2.new(0, 22, 0, 70)
+        bar.BackgroundColor3       = COLORS.DropdownBg or Color3.fromRGB(16, 18, 24)
+        bar.BackgroundTransparency = 0.05
+        bar.BorderSizePixel        = 0
+        bar.Parent                 = searchGui
+        local barCorner = Instance.new("UICorner"); barCorner.CornerRadius = UDim.new(1, 0); barCorner.Parent = bar
+        local barStroke = Instance.new("UIStroke")
+        barStroke.Color      = COLORS.DropdownBorder or Color3.fromRGB(45, 52, 70)
+        barStroke.Thickness  = 1
+        barStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        barStroke.Parent     = bar
+
+        -- Soft outer glow via a scaled transparent stroke on a shadow frame
+        local glow = Instance.new("Frame")
+        glow.Name                   = "Glow"
+        glow.Size                   = UDim2.new(1, 12, 1, 12)
+        glow.Position               = UDim2.new(0, -6, 0, -6)
+        glow.BackgroundTransparency = 1
+        glow.ZIndex                 = bar.ZIndex - 1
+        glow.Parent                 = bar
+        local glowCorner = Instance.new("UICorner"); glowCorner.CornerRadius = UDim.new(1, 0); glowCorner.Parent = glow
+        local glowStroke = Instance.new("UIStroke")
+        glowStroke.Color        = COLORS.Accent or Color3.fromRGB(70, 110, 220)
+        glowStroke.Thickness    = 2
+        glowStroke.Transparency = 0.85
+        glowStroke.Parent       = glow
+
+        -- Magnifier icon (text glyph; swap for rbxassetid if preferred)
+        local icon = Instance.new("TextLabel")
+        icon.Name                   = "Icon"
+        icon.Size                   = UDim2.new(0, 28, 1, 0)
+        icon.Position               = UDim2.new(0, 6, 0, 0)
+        icon.BackgroundTransparency = 1
+        icon.Text                   = "\u{2315}"   -- ⌕
+        icon.TextColor3             = COLORS.AccentGlow or Color3.fromRGB(130, 170, 255)
+        icon.TextSize               = 20
+        icon.TextXAlignment         = Enum.TextXAlignment.Center
+        icon.Parent                 = bar
+        if UI_FONT then pcall(function() icon.FontFace = UI_FONT end) end
+
+        local box = Instance.new("TextBox")
+        box.Name                   = "Input"
+        box.Size                   = UDim2.new(1, -44, 1, -8)
+        box.Position               = UDim2.new(0, 38, 0, 4)
+        box.BackgroundTransparency = 1
+        box.Text                   = ""
+        box.PlaceholderText        = "search features\u{2026}"
+        box.TextColor3             = COLORS.TextPrimary or Color3.fromRGB(230, 232, 240)
+        box.PlaceholderColor3      = COLORS.TextMuted or Color3.fromRGB(120, 125, 140)
+        box.TextSize               = 14
+        box.TextXAlignment         = Enum.TextXAlignment.Left
+        box.ClearTextOnFocus       = false
+        box.Parent                 = bar
+        if UI_FONT then pcall(function() box.FontFace = UI_FONT end) end
+
+        -- Focus-driven stroke + glow animation
+        local function setFocused(on)
+            if tween then
+                tween(barStroke,  { Color = on and (COLORS.AccentGlow or Color3.fromRGB(130,170,255)) or (COLORS.DropdownBorder or Color3.fromRGB(45,52,70)), Thickness = on and 1.4 or 1 }, 0.18)
+                tween(glowStroke, { Transparency = on and 0.55 or 0.85, Thickness = on and 3 or 2 }, 0.18)
+            else
+                barStroke.Color  = on and (COLORS.AccentGlow or Color3.fromRGB(130,170,255)) or (COLORS.DropdownBorder or Color3.fromRGB(45,52,70))
+                barStroke.Thickness  = on and 1.4 or 1
+                glowStroke.Transparency = on and 0.55 or 0.85
+                glowStroke.Thickness    = on and 3 or 2
+            end
+        end
+        box.Focused:Connect(function() setFocused(true) end)
+        box.FocusLost:Connect(function() setFocused(false) end)
+
+        -- Results popup
+        local popup = Instance.new("Frame")
+        popup.Name                   = "Results"
+        popup.Size                   = UDim2.new(0, BAR_W, 0, 0)
+        popup.Position               = UDim2.new(0, 22, 0, 70 + BAR_H + 8)
+        popup.BackgroundColor3       = COLORS.DropdownBg or Color3.fromRGB(16, 18, 24)
+        popup.BackgroundTransparency = 0.03
+        popup.BorderSizePixel        = 0
+        popup.Visible                = false
+        popup.ClipsDescendants       = true
+        popup.ZIndex                 = bar.ZIndex + 1
+        popup.Parent                 = searchGui
+        local popCorner = Instance.new("UICorner"); popCorner.CornerRadius = UDim.new(0, 10); popCorner.Parent = popup
+        local popStroke = Instance.new("UIStroke")
+        popStroke.Color     = COLORS.DropdownBorder or Color3.fromRGB(45, 52, 70)
+        popStroke.Thickness = 1
+        popStroke.Parent    = popup
+        local popLayout = Instance.new("UIListLayout")
+        popLayout.FillDirection     = Enum.FillDirection.Vertical
+        popLayout.SortOrder         = Enum.SortOrder.LayoutOrder
+        popLayout.Padding           = UDim.new(0, 0)
+        popLayout.Parent            = popup
+        local popPad = Instance.new("UIPadding")
+        popPad.PaddingTop = UDim.new(0, 4); popPad.PaddingBottom = UDim.new(0, 4)
+        popPad.PaddingLeft= UDim.new(0, 4); popPad.PaddingRight = UDim.new(0, 4)
+        popPad.Parent     = popup
+
+        -- Index controls across all tabs: { tab, section, control, label, tabName, sectionName }
+        local CONTROL_PREFIXES = {
+            "Toggle_", "Slider_", "Dropdown_", "ColorPicker_", "ColorGroup_",
+            "Keybind_", "Button_", "TextBox_", "Label_",
+        }
+        local function prefixOf(nm)
+            for _, p in ipairs(CONTROL_PREFIXES) do
+                if nm:sub(1, #p) == p then return p end
+            end
+        end
+
+        local function friendlyTabName(tab)
+            if tab and tab.name then return tostring(tab.name) end
+            if tab and tab.button and tab.button:FindFirstChildOfClass("TextLabel") then
+                return tab.button:FindFirstChildOfClass("TextLabel").Text
+            end
+            return "Tab"
+        end
+        local function friendlySectionName(sec)
+            local lbl = sec:FindFirstChild("Header") and sec.Header:FindFirstChildOfClass("TextLabel")
+                     or sec:FindFirstChildOfClass("TextLabel")
+            if lbl and lbl.Text ~= "" then return lbl.Text end
+            local nm = sec.Name
+            if nm:sub(1,8) == "Section_" then nm = nm:sub(9) end
+            return nm
+        end
+
+        local entries = {}
+        local function rebuild()
+            entries = {}
+            for _, tab in ipairs(UI and UI.tabs or {}) do
+                local tabName = friendlyTabName(tab)
+                for _, col in ipairs({ tab.leftCol, tab.rightCol }) do
+                    if col then
+                        for _, sec in ipairs(col:GetChildren()) do
+                            if sec:IsA("Frame") and sec.Name:sub(1,8) == "Section_" then
+                                local secName = friendlySectionName(sec)
+                                local cardBox = sec:FindFirstChild("CardBox")
+                                local container = cardBox and cardBox:FindFirstChild("Container")
+                                if container then
+                                    for _, ctrl in ipairs(container:GetChildren()) do
+                                        if (ctrl:IsA("Frame") or ctrl:IsA("TextButton")) then
+                                            local pre = prefixOf(ctrl.Name)
+                                            if pre then
+                                                local label = ctrl.Name:sub(#pre + 1):gsub("_", " ")
+                                                table.insert(entries, {
+                                                    tab      = tab,
+                                                    section  = sec,
+                                                    control  = ctrl,
+                                                    tabName  = tabName,
+                                                    secName  = secName,
+                                                    label    = label,
+                                                    key      = label:lower(),
+                                                    tabKey   = tabName:lower(),
+                                                    secKey   = secName:lower(),
+                                                })
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        local function clearResults()
+            for _, c in ipairs(popup:GetChildren()) do
+                if c:IsA("TextButton") then c:Destroy() end
+            end
+        end
+
+        local function flashControl(ctrl)
+            local stroke = ctrl:FindFirstChildOfClass("UIStroke")
+            local created = false
+            if not stroke then
+                stroke = Instance.new("UIStroke")
+                stroke.Color = COLORS.AccentGlow or Color3.fromRGB(130,170,255)
+                stroke.Thickness = 2
+                stroke.Parent = ctrl
+                created = true
+            end
+            local old = { Color = stroke.Color, Thickness = stroke.Thickness, Transparency = stroke.Transparency }
+            stroke.Color       = COLORS.AccentGlow or Color3.fromRGB(130,170,255)
+            stroke.Thickness   = 2.5
+            stroke.Transparency= 0
+            task.delay(1.1, function()
+                if created then
+                    pcall(function() stroke:Destroy() end)
+                else
+                    pcall(function()
+                        stroke.Color        = old.Color
+                        stroke.Thickness    = old.Thickness
+                        stroke.Transparency = old.Transparency
+                    end)
+                end
+            end)
+        end
+
+        local function openMenu()
+            pcall(function() if type(_showMenu) == "function" then _showMenu() end end)
+            if mainFrame then pcall(function() mainFrame.Visible = true end) end
+        end
+
+        local function switchToTab(tab)
+            if tab and tab.button then
+                pcall(function()
+                    if typeof(tab.button.MouseButton1Click) == "RBXScriptSignal" then
+                        -- Simulate click by firing registered handler if available; otherwise rely on
+                        -- the library's own :SelectTab if present.
+                    end
+                end)
+            end
+            pcall(function()
+                if UI and type(UI.selectTab) == "function" then UI:selectTab(tab) end
+            end)
+            pcall(function()
+                if tab and tab.frame then tab.frame.Visible = true end
+                for _, other in ipairs(UI and UI.tabs or {}) do
+                    if other ~= tab and other.frame then pcall(function() other.frame.Visible = false end) end
+                end
+            end)
+        end
+
+        local function jumpTo(entry)
+            openMenu()
+            switchToTab(entry.tab)
+            task.defer(function()
+                pcall(function()
+                    local col = entry.section.Parent
+                    if col and col:IsA("ScrollingFrame") then
+                        col.CanvasPosition = Vector2.new(0, math.max(0, entry.section.AbsolutePosition.Y - col.AbsolutePosition.Y - 20))
+                    end
+                end)
+                flashControl(entry.control)
+            end)
+        end
+
+        local function renderResults(hits)
+            clearResults()
+            local maxRows = math.min(#hits, 8)
+            for i = 1, maxRows do
+                local e = hits[i]
+                local row = Instance.new("TextButton")
+                row.Name                   = "Row_" .. i
+                row.Size                   = UDim2.new(1, 0, 0, 30)
+                row.BackgroundColor3       = COLORS.SectionBg or Color3.fromRGB(22, 24, 32)
+                row.BackgroundTransparency = 0.25
+                row.BorderSizePixel        = 0
+                row.Text                   = ""
+                row.AutoButtonColor        = false
+                row.LayoutOrder            = i
+                row.Parent                 = popup
+                local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 6); rc.Parent = row
+
+                local title = Instance.new("TextLabel")
+                title.Size                   = UDim2.new(1, -16, 0, 16)
+                title.Position               = UDim2.new(0, 8, 0, 1)
+                title.BackgroundTransparency = 1
+                title.Text                   = e.label
+                title.TextColor3             = COLORS.TextPrimary or Color3.fromRGB(230, 232, 240)
+                title.TextSize               = 13
+                title.TextXAlignment         = Enum.TextXAlignment.Left
+                title.Parent                 = row
+                if UI_FONT then pcall(function() title.FontFace = UI_FONT end) end
+
+                local crumb = Instance.new("TextLabel")
+                crumb.Size                   = UDim2.new(1, -16, 0, 12)
+                crumb.Position               = UDim2.new(0, 8, 0, 16)
+                crumb.BackgroundTransparency = 1
+                crumb.Text                   = e.tabName .. " \u{203A} " .. e.secName
+                crumb.TextColor3             = COLORS.TextMuted or Color3.fromRGB(120, 125, 140)
+                crumb.TextSize               = 10
+                crumb.TextXAlignment         = Enum.TextXAlignment.Left
+                crumb.Parent                 = row
+                if UI_FONT then pcall(function() crumb.FontFace = UI_FONT end) end
+
+                row.MouseEnter:Connect(function()
+                    if tween then tween(row, { BackgroundTransparency = 0 }, 0.12)
+                    else row.BackgroundTransparency = 0 end
+                end)
+                row.MouseLeave:Connect(function()
+                    if tween then tween(row, { BackgroundTransparency = 0.25 }, 0.12)
+                    else row.BackgroundTransparency = 0.25 end
+                end)
+                row.MouseButton1Click:Connect(function()
+                    box.Text = ""
+                    popup.Visible = false
+                    jumpTo(e)
+                end)
+            end
+            popup.Visible = maxRows > 0
+            popup.Size    = UDim2.new(0, BAR_W, 0, (maxRows * 30) + (maxRows - 1) * 0 + 8)
+        end
+
+        local function search(q)
+            q = (q or ""):lower():gsub("^%s+",""):gsub("%s+$","")
+            if q == "" then
+                popup.Visible = false
+                clearResults()
+                return
+            end
+            local hits = {}
+            for _, e in ipairs(entries) do
+                local labelMatch = e.key:find(q, 1, true)
+                local secMatch   = e.secKey:find(q, 1, true)
+                local tabMatch   = e.tabKey:find(q, 1, true)
+                if labelMatch or secMatch or tabMatch then
+                    -- score: direct label prefix > label contains > section/tab hit
+                    local score
+                    if labelMatch == 1 then score = 1
+                    elseif labelMatch then score = 2
+                    elseif secMatch   then score = 3
+                    else score = 4 end
+                    hits[#hits + 1] = { e = e, score = score }
+                end
+            end
+            table.sort(hits, function(a, b)
+                if a.score ~= b.score then return a.score < b.score end
+                return a.e.label < b.e.label
+            end)
+            local trimmed = {}
+            for i = 1, math.min(#hits, 8) do trimmed[i] = hits[i].e end
+            renderResults(trimmed)
+        end
+
+        box:GetPropertyChangedSignal("Text"):Connect(function() search(box.Text) end)
+
+        -- Build index after everything's had time to load; rebuild on new sections
+        task.wait(3)
+        rebuild()
+        local reindex
+        reindex = function()
+            if not reindex then return end
+            reindex = nil
+            task.delay(0.6, function()
+                rebuild()
+                reindex = function() end
+                if box.Text ~= "" then search(box.Text) end
+                reindex = nil
+            end)
+        end
+        for _, tab in ipairs(UI and UI.tabs or {}) do
+            for _, col in ipairs({ tab.leftCol, tab.rightCol }) do
+                if col then
+                    col.DescendantAdded:Connect(function() if reindex then reindex() end end)
+                end
+            end
+        end
+
+        -- Click outside closes the popup
+        UserInputService.InputBegan:Connect(function(input, gp)
+            if gp then return end
+            if input.UserInputType ~= Enum.UserInputType.MouseButton1
+            and input.UserInputType ~= Enum.UserInputType.Touch then return end
+            if not popup.Visible then return end
+            local m = UserInputService:GetMouseLocation()
+            local inBar   = m.X >= bar.AbsolutePosition.X and m.X <= bar.AbsolutePosition.X + bar.AbsoluteSize.X
+                        and m.Y >= bar.AbsolutePosition.Y and m.Y <= bar.AbsolutePosition.Y + bar.AbsoluteSize.Y
+            local inPop   = m.X >= popup.AbsolutePosition.X and m.X <= popup.AbsolutePosition.X + popup.AbsoluteSize.X
+                        and m.Y >= popup.AbsolutePosition.Y and m.Y <= popup.AbsolutePosition.Y + popup.AbsoluteSize.Y
+            if not inBar and not inPop then popup.Visible = false end
+        end)
+
+        print("[kamidere] addon: floating-search ready")
+        end) -- pcall
+        if not __ok then warn("[kamidere] FLOATING SEARCH ERROR: " .. tostring(__err)) end
+    end)
+
 end)
 
 return __kami_result
