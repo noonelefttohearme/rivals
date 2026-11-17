@@ -1,5 +1,5 @@
 --[[
-    kamidere (UE) - Cracked / Cleaned Build
+    kamidere - Clean Build
     Game: Roblox Rivals
     Cleaned build: key check bypassed, anti-debug removed, header/spam stripped.
     Note: Core logic remains in custom VM bytecode (required for function).
@@ -10,12 +10,12 @@
 
 local arguments = table.pack(...)
 local sharedEnv = getgenv and getgenv() or _G
-local previous = rawget(sharedEnv, 'kamidere - Cracked')
+local previous = rawget(sharedEnv, 'kamidere')
 
 if type(previous) == 'table' and (previous.status == 'starting' or previous.status == 'entry_returned') then
     return previous
 end
-if rawget(sharedEnv, 'UE_LOADED') == true then
+if rawget(sharedEnv, 'KAMIDERE_LOADED') == true then
     return previous
 end
 
@@ -26,9 +26,9 @@ local control = {
     stopped = false,
 }
 
-sharedEnv['kamidere - Cracked'] = control
+sharedEnv['kamidere'] = control
 
-local previousLoaded = rawget(sharedEnv, 'UE_LOADED')
+local previousLoaded = rawget(sharedEnv, 'KAMIDERE_LOADED')
 local previousLibrary = rawget(sharedEnv, 'Library')
 local previousOptions = rawget(sharedEnv, 'Options')
 local previousToggles = rawget(sharedEnv, 'Toggles')
@@ -86,7 +86,7 @@ local function runApplication()
         sharedEnv.Library = previousLibrary
         sharedEnv.Options = previousOptions
         sharedEnv.Toggles = previousToggles
-        sharedEnv.UE_LOADED = previousLoaded
+        sharedEnv.KAMIDERE_LOADED = previousLoaded
 
         return control
     end
@@ -101,9 +101,9 @@ local function runApplication()
         if type(applicationLibrary) == 'table' and applicationLibrary ~= previousLibrary and typeof(applicationLibrary.ScreenGui) == 'Instance' then
         applicationLibrary.ScreenGui.Destroying:Connect(function()
             control.status = 'gui_closed'
-            -- keep running: only clear UE_LOADED flag if nothing else owns Library
+            -- keep running: only clear KAMIDERE_LOADED flag if nothing else owns Library
             if rawget(sharedEnv, 'Library') == applicationLibrary then
-                sharedEnv.UE_LOADED = previousLoaded
+                sharedEnv.KAMIDERE_LOADED = previousLoaded
             end
         end)
     end
@@ -87764,7 +87764,7 @@ function Backend.loadProgramData()
         [1480] = 'AddDropdown: Missing default value. Pass `AllowNull` as true if this was intentional.',
         [1481] = 1500,
         [1482] = '-3.141592653589793',
-        [1483] = 'unnamed/',
+        [1483] = 'kamidere/',
         [1484] = 192,
         [1485] = 'esp_fill_changed',
         [1486] = 'IsFullyAiming',
@@ -88646,7 +88646,7 @@ function Backend.loadProgramData()
         [2362] = 431,
         [2363] = 'rbxassetid://8616930816',
         [2364] = 'ImageButton',
-        [2365] = 'UE_LOADED',
+        [2365] = 'KAMIDERE_LOADED',
         [2366] = '\127\132\31\28g\n',
         [2367] = 13202058620935,
         [2368] = 'IMAGE_SCALE',
@@ -89532,7 +89532,7 @@ function Backend.loadProgramData()
         [3248] = 15052,
         [3249] = 394,
         [3250] = 12553,
-        [3251] = '\t\tif (not isfile("LOAD_PERSISTENT")) then\n\t\t\treturn;\n\t\tend;\n\t\tscript_key, SILENT = "%s", isfile("LOAD_SILENTLY");\n\t\tloadstring(game:HttpGet("https://YOUR-CRACKED-SCRIPT-URL-HERE"))();\n\t\t',
+        [3251] = '\t\tif (not isfile("LOAD_PERSISTENT")) then\n\t\t\treturn;\n\t\tend;\n\t\tscript_key, SILENT = "%s", isfile("LOAD_SILENTLY");\n\t\tloadstring(game:HttpGet("https://YOUR-KAMIDERE-SCRIPT-URL-HERE"))();\n\t\t',
         [3252] = -19023,
         [3253] = 'get_server',
         [3254] = 'GetObjects',
@@ -90634,7 +90634,7 @@ function Backend.loadProgramData()
         [4350] = 643,
         [4351] = -20153,
         [4352] = 'G',
-        [4353] = 'unnamed/core/ue.png',
+        [4353] = 'kamidere/kami_logo.png',
         [4354] = 'esp_override_appearance',
         [4355] = 'status',
         [4356] = 12421424491824,
@@ -90860,7 +90860,7 @@ function Backend.loadProgramData()
         [4576] = 'wrap',
         [4577] = 360,
         [4578] = 803,
-        [4579] = 'unnamed/rivals',
+        [4579] = 'kamidere/rivals',
         [4580] = 12732,
         [4581] = 'change sound',
         [4582] = 'autoban_maps',
@@ -91179,7 +91179,7 @@ function Backend.loadProgramData()
         [4895] = '\229\232Z}%\134\210K`',
         [4896] = 13170919157738,
         [4897] = 5980924483010,
-        [4898] = 'unnamed',
+        [4898] = 'kamidere',
         [4899] = 8389,
         [4900] = 'value',
         [4901] = 'weather_color_1',
@@ -91394,7 +91394,7 @@ function Backend.loadProgramData()
         [5110] = 643190981207,
         [5111] = '\234\234j=',
         [5112] = '/settings/autoload.txt',
-        [5113] = 'images/ue.png',
+        [5113] = 'kamidere/kami_logo.png',
         [5114] = 8665,
         [5115] = 'effect settings',
         [5116] = 25925213773392,
@@ -91803,7 +91803,7 @@ function Backend.loadProgramData()
         [5519] = 471,
         [5520] = -20666,
         [5521] = 125,
-        [5522] = 'unnamed/core',
+        [5522] = 'kamidere/core',
         [5523] = 2771,
         [5524] = 'indicator_ragebot_status_color',
         [5525] = 10863,
@@ -93131,7 +93131,7 @@ function Backend.loadProgramData()
         [6847] = '\175\nP\245\156',
         [6848] = 'TabPadding',
         [6849] = 10071,
-        [6850] = 'unnamed/themes',
+        [6850] = 'kamidere/themes',
         [6851] = 'viewmodel_body_transparency',
         [6852] = '<b>{NAME}</b>, <b>{DMG}</b>, <b>{PART}</b>, <b>{WEAPON}</b>',
         [6853] = 'targeting',
@@ -491509,7 +491509,7 @@ end)
     local _cfgFolder = "kamidere/configs"
     local _CFG_SEARCH = {
         "kamidere/configs","Rivals","Rivals/configs","rivals","rivals/configs",
-        "unnamed/rivals/settings","unnamed/rivals","rivals/settings",
+        "kamidere/rivals/settings","kamidere/rivals","rivals/settings",
         "kami","kamidere","configs","workspace",
     }
     -- _cfgIndex maps display name → full path (so Load can find the file)
@@ -491940,13 +491940,13 @@ end)
             -- Prefixes whose entire category should be hidden from the UI.
             -- Match by substring on prefix too (not just exact) in case the VM
             -- registers keys under unexpected naming like dmgnums_ or dmgnum_.
-            -- Also hide UE's native ragebot/triggerbot sections so the kami
+            -- Also hide the native ragebot/triggerbot sections so the kami
             -- Rage section is the only Rage source in the Ragebot tab.
             local _HIDE_EXACT = {
                 damage=true, damagenumber=true, damagenumbers=true, dmg=true,
                 dmgnumber=true, dmgnumbers=true, dmgnum=true, dmgnums=true, dn=true,
                 -- ragebot / triggerbot / targeting all UN-hidden: operator
-                -- wants UE's native ragebot pipeline back after my custom
+                -- wants the native ragebot pipeline back after my custom
                 -- Rage broke his win streak.
             }
             local function _HIDE_PREFIX_FN(p)
@@ -492875,7 +492875,7 @@ end)
     end)
 
     -- ============================================================
-    -- [FORTNITE DAMAGE NUMBERS] - standalone, not from UE
+    -- [FORTNITE DAMAGE NUMBERS] - standalone
     -- Hooks every enemy Humanoid's Health. On a damage drop > 0,
     -- spawns a blue drop-shadowed billboard number at the enemy's
     -- root position that pops up, drifts upward, and fades. Shows
@@ -493842,9 +493842,9 @@ end)
                         g:Destroy()
                     end
                 end
-                local control = getgenv()["kamidere - Cracked"] or getgenv()["Kamidere"]
+                local control = getgenv()["kamidere"] or getgenv()["Kamidere"]
                 if control then control.stopped = true end
-                getgenv().UE_LOADED = nil
+                getgenv().KAMIDERE_LOADED = nil
                 print("[kamidere] UNLOADED")
             end)
         end)
@@ -494414,7 +494414,7 @@ end)
             end
         end
 
-        -- Silent Aim lives in the Aimbot tab (tab 2), next to UE's native
+        -- Silent Aim lives in the Aimbot tab (tab 2), next to the native
         -- Aimbot / Silent Aim section.
         local aimbotTab = _tabObjects[2] or miscTab
         local saSec = UI.createSection(aimbotTab, "Silent Aim \226\154\153", "left")
